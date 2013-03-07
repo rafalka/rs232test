@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/buttons">
+        <file>16/application-exit.png</file>
+        <file>16/arrow-down-double.png</file>
+        <file>16/arrow-left-double.png</file>
+        <file>16/configure.png</file>
+        <file>16/connect_creating.png</file>
+        <file>16/connect_established.png</file>
+        <file>16/connect_no.png</file>
+        <file>16/dialog-error.png</file>
+        <file>16/dialog-information.png</file>
+        <file>16/help.png</file>
+        <file>16/misc.png</file>
+    </qresource>
+</RCC>

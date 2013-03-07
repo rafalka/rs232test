@@ -1,0 +1,986 @@
+/***************************************************************************
+ * @file     parseopt.c                                                     
+ * @brief    High level command parsing API declaration
+ *
+ * @author   Rafal Kukla < rkdevel@gmail.com >
+ *
+ ***************************************************************************
+ *               Copyright (C) 2010 Rafal Kukla         
+ *                                                                         
+ *  This file is a part of libcsupp library and is distributed under       
+ *  two licenses (full license text is available in file LICESE):          
+ *  - For the use inside Motorola Inc.:                                    
+ *    The libcsupp library may be dynamically or statically linked         
+ *    with any Motorola product without ANY restrictions.                  
+ *    Full license text is available in file LICENSE.MOT                   
+ *                                                                         
+ *  - For any other usage, it is available under GPLv2:                    
+ *    Full license text is available in file LICENSE.GPL2                  
+ ***************************************************************************/
+
+
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#ifdef __GNU_LIBRARY__
+#include <libgen.h>
+#endif
+#include <string.h>
+#include <ctype.h>
+
+#include "strutils.h"
+#include "parseopt.h"
+
+
+#ifdef _DEBUG
+#define _DEBUGMSG(_msg_) fprintf(stderr,"FILE: %s\nLINE:  %d\nMESSAGE: %s\n",__FILE__, __LINE__,(_msg_) )
+#else
+#define _DEBUGMSG(_msg_) /* _msg_ */
+#endif
+
+
+/* This funtion reports any messages produced by parser. It's used instead of fprintf(stderr,...); */
+void _parseopt_error(const char* msg,...)
+{
+  char*  lpMsgBuf=NULL;
+  int    buflen=0;
+  va_list arglist;
+
+  va_start(arglist,msg);
+  if ( (buflen=vsnprintf(NULL,0,msg,arglist))>0 )
+  {
+    if ( (lpMsgBuf=(char*) malloc(buflen+2)) )
+    {
+      if ( (buflen=vsnprintf(lpMsgBuf,buflen+1,msg,arglist))>0 )
+      {
+        lpMsgBuf[buflen] = 0;
+        output_error_msg(lpMsgBuf);
+      }
+      free(lpMsgBuf);
+    }
+  }
+  va_end(arglist);
+}
+
+
+/*
+TODO: Własna implemntacja getopt_long
+Założenia:
+Funkcja zwróci ilość nieprzetworzonych (wolnych) parametrów.
+oraz tak przepisze tablicę argvp[] by na początku znajdowały się te parametry.
+argv[0] zawsze musi zawierać nazwę programu.
+Parametr równy -- oznacza, że po nim będą tylko wolne parametry.
+mozna rozwazyc opcje, np czy funkcja ma zwrocic blad przy napotkaniu nieznanej opcji,
+czy ma zwrocic ja jako nieprzetworzona. 
+W przypadku bledu zostanie zwrocona wartosc ujemna, dolne 8 bitow oznaczac bedzie 
+w getopt_long możliwa jest zapis krótkiej opcji typu -c1, -cdupa
+z drugiej strony, fajnie było by umożliwić zapis długich opcji z jednym -, tak jak w funkcji getopt_long_only()
+index opcji powodujacej blad, wyzsze 8 - numer bledu.
+
+
+*/
+
+
+
+
+/***********************************************************************************************
+  Funkcja uogólnia funkcję parsującą parametry lini poleceń getopt_long()
+  opts - tablica struktur opt_def okreslających parametry, zakończona 
+         pustą struktura.
+***********************************************************************************************/
+
+long int parse_opt(int argc, char* argv[],opt_defs_t *opts, unsigned options)
+{
+#define FATAL_ERROR(_code_) {err=(_code_) ; _DEBUGMSG("FATAL_ERROR"); goto parse_opt_end;}
+#define FATAL_INTERROR(_code_,_idx_) {err=(_code_); _DEBUGMSG("FATAL_INTERROR"); argidx=(_idx_); goto parse_opt_end;}
+  unsigned short  err=0;
+  int             opts_cnt;   ///< Count of options defs passed in opts
+  int             cnt,c=0;
+  opt_defs_t      *optr=NULL;
+  size_t          optarglen;
+
+  enum { IS_ERR, IS_EOP, IS_SHORT_OPT, IS_LONG_OPT, IS_PARAMETER};
+    
+  char            eo_params=0;
+  int             par_type;
+  int             argidx=0;     ///< current argument index
+  int             freeparidx=0; ///< current free parameter index in opts
+  struct {                      ///< This structure keeps data for free option array
+    int         arrcnt;
+    int*        elcnt;
+    opt_defs_t  op;
+  }               optmult;
+
+  char*           arg;        ///< Current argument
+  char*           opt;        ///< option name
+  int             optlen;     ///< Length of opt
+  char*           optarg;     ///< option argument
+  opt_val_ptr     valptr;     ///< pointer to the output value;
+//  int             optarglen;
+  char*           tail;
+  char*           exename;
+  char            skip_next_param=0;
+
+  if (!argc) FATAL_INTERROR(ERR_POPT_INVALID_PAR,0);
+  if (!argv || !opts) FATAL_INTERROR(ERR_POPT_INVALID_PAR,0);
+
+  memset(&optmult,0,sizeof(optmult));
+
+  // Count options definitions, check corretness, and reset occurences counter
+  for (opts_cnt=0, optr=opts; optr->short_opt || optr->long_opt || optr->has_arg || optr->val.v; opts_cnt++, optr++) 
+  {
+    // Check operation code corretness
+    if (!IS_ELOP_VALID(optr->elem_size)) FATAL_INTERROR(ERR_POPT_INVALID_PAR,opts_cnt);
+
+    err = 0;
+    switch (optr->val_type)
+    {
+      case otString: 
+        err = ! IS_ELOP_SET( optr->elem_size );
+        break;
+      case otChar:   
+        err = ! IS_ELOP_SET( optr->elem_size );
+        break;
+      case otInt:
+        err = ! IS_ELOP_VALID( optr->elem_size );
+        break;
+      case otFloat:  
+        err = ! IS_ELOP_ARTM( optr->elem_size );
+        break;
+        optmult.op.val.f++; break;
+      case otBool:
+        err = ! IS_ELOP_VALID( optr->elem_size );
+        break;
+      case otList:
+        err = ! IS_ELOP_VALID( optr->elem_size );
+        break;
+      case otCallback:
+        break;
+      case otSubcmnd:
+        break;
+      default:
+        err = 1;
+    }
+    if (err) FATAL_INTERROR(ERR_POPT_INVALID_PAR,opts_cnt);  
+
+    
+    optr->occurences = 0; 
+  }
+
+  if (!opts_cnt) FATAL_INTERROR(ERR_POPT_INVALID_PAR,0);
+
+#ifdef __GNU_LIBRARY__
+  exename = basename(argv[0]);
+#else
+#if defined WIN32 || defined _WIN32
+#define PAHTSEP '\\'
+#else
+#define PAHTSEP '/'
+#endif
+  {
+    register char* c;
+    c=exename=argv[0];
+    while (*c)
+    {
+      if (*c==PAHTSEP) exename=c+1;
+      c++;
+    }
+  }
+
+
+#endif
+  freeparidx=1;
+
+  // ================================      M A I N   L O O P     ===============================
+  for (argidx=1;argidx<argc;argidx++)
+  {
+    // skip if next parameter has already been used for option parameter
+    if ( skip_next_param)
+    {
+      skip_next_param=0;
+      continue;
+    }
+    
+    // Try to skip white characters at the beginning, but only for options
+    // For free parameters it may be intended
+    if (! (arg = argv[argidx]) ) continue;
+    while (*arg && isspace(*arg) ) arg++;
+    if ( !(*arg=='-') ) arg = argv[argidx];
+
+    opt=arg;
+    if (  !(optlen=(int)strlen(opt)) ) continue;
+
+    //=============================================================================================================================================
+    //=== detect whether parameter is an option
+    //=============================================================================================================================================
+    optarg=NULL; optarglen=0;
+    if ( !eo_params &&  *opt=='-') // It's an option
+    {
+      switch (opt[1]) 
+      {
+      case 0:
+        // '-' only, then treat it as a free parameter
+        par_type=IS_PARAMETER;
+        break;
+      case '-':                // long option
+        // if '--' only - end op options marker
+        if (opt[2])
+        {
+          par_type=IS_LONG_OPT;
+          opt+=2;optlen-=2;
+        } 
+        else par_type=IS_EOP; 
+        break;
+      case '=': 
+        if ( !(options&POPT_NOT_USE_EQUAL_SIGN) ) { par_type=IS_ERR; break;}
+        // lack of break here is intended
+      case ':': 
+        if ( (opt[1]==':') && !(options&POPT_NOT_USE_COLON_SIGN) ) { par_type=IS_ERR; break;}
+        // lack of break here is intended
+      default:                 // short options parsing
+        par_type=IS_SHORT_OPT;
+        opt++; optlen--;
+        switch (opt[1]) //check next char after short opt char
+        {
+        case 0:
+          break;
+        case '=': 
+          if ( !(options&POPT_NOT_USE_EQUAL_SIGN) ) 
+          {
+            optarg=&opt[2]; optarglen=optlen-2; optlen=1;
+            break;
+          }
+          goto _check_next_short_char_default;
+        case ':': 
+          if ( !(options&POPT_NOT_USE_COLON_SIGN) )
+          {
+            optarg=&opt[2]; optarglen=optlen-2; optlen=1;
+            break;
+          }
+        default:
+          _check_next_short_char_default:
+
+          if (options&POPT_ALLOW_ONE_DASH_FOR_LONG)
+            par_type=IS_LONG_OPT;
+          else if (options&POPT_REQ_SHORT_PAR_DELIM)
+            par_type=IS_ERR;
+          else // rest of short option name is a parameter
+          {
+            optarg=&opt[1]; optarglen=optlen-1; optlen=1;
+          }
+        }
+      }
+    }
+    else
+    {
+      //argument is a free parameter
+      par_type=IS_PARAMETER;
+      optarg=opt;
+      optarglen=optlen;
+    }
+
+    //=============================================================================================================================================
+    //=== Find appriopriate definition is opts
+    //=============================================================================================================================================
+    switch(par_type)
+    {
+    //============================================= Error
+    case IS_ERR:
+      if (!(options&POPT_QUIET)) _parseopt_error("%s: An syntax error occured during parsing option %s\n",exename,arg); 
+      FATAL_ERROR(ERR_POPT_SYNTAX);
+      break;
+    case IS_EOP:
+      eo_params=1; 
+      //DEBUGMSG: fprintf(stderr,"Opt %s is a end of options marker\n",arg);
+      continue;
+    //============================================= Short option
+    case IS_SHORT_OPT:
+      //DEBUGMSG: fprintf(stderr,"Opt %s is a short opt %c, val: %.*s\n",arg,*opt,optarglen,optarg?optarg:"");
+      {
+        register char sopt;     // short option
+        if (options&POPT_IGNORE_CASE)
+        {
+          sopt=(char) toupper(*opt);
+          for (optr=opts,cnt=opts_cnt;cnt&&((char)toupper(optr->short_opt)!=sopt);cnt--,optr++) ;
+        }
+        else
+        {
+          sopt=*opt;
+          for (optr=opts,cnt=opts_cnt;cnt&&(optr->short_opt!=sopt);cnt--,optr++) ;
+        }
+		    
+        if (!cnt) {
+          if (!(options&POPT_QUIET)) _parseopt_error( "%s: unrecognized option `%.*s'\n",exename,optlen+((unsigned)(opt-arg)),arg);
+          FATAL_ERROR(ERR_POPT_UNKNOWN_OPT);
+        }
+      }
+      break;
+
+     //============================================= Long option
+    case IS_LONG_OPT:
+    // split long parameter into name and value
+    // if delimeter signs are allowed
+      if ( (options & (POPT_REQ_SHORT_PAR_DELIM | POPT_NOT_USE_EQUAL_SIGN))
+             != (POPT_REQ_SHORT_PAR_DELIM | POPT_NOT_USE_EQUAL_SIGN) 
+         )
+      {
+        optarg=opt;
+        while (*optarg)
+        {
+          if ( (*optarg=='=') && !(options&POPT_NOT_USE_EQUAL_SIGN) ) break;
+          else if ( (*optarg==':') && !(options&POPT_NOT_USE_COLON_SIGN) ) break;
+          optarg++;
+        }
+        if (*optarg)
+        {
+          optarg++; 
+          optarglen = optlen - (int)(optarg-opt);
+          optlen = (int)(optarg-opt)-1;
+        }
+        else optarg=NULL;
+      }
+
+      //DEBUGMSG: fprintf(stderr,"Opt %s is a long opt %.*s, val: %.*s\n",arg,optlen,opt,optarglen,optarg?optarg:"");
+
+      // Find definition in opts
+      optr=opts;cnt=opts_cnt;
+      if (options&POPT_IGNORE_CASE)
+        while ( cnt) 
+        {
+          if ( optr->long_opt && !STRNCASECMP( (const char*) optr->long_opt,(const char*) opt,optlen) && !optr->long_opt[optlen] ) break;
+          cnt--; optr++; 
+        }
+      else
+        while ( cnt) 
+        {
+          if ( optr->long_opt && !strncmp( (const char*) optr->long_opt,(const char*) opt,optlen) && !optr->long_opt[optlen] ) break;
+          cnt--; optr++; 
+        }
+	    
+      if (!cnt) {
+        if (!(options&POPT_QUIET)) _parseopt_error( "%s: unrecognized option `%.*s'\n",exename,optlen+((unsigned)(opt-arg)),arg);
+        FATAL_ERROR(ERR_POPT_UNKNOWN_OPT);
+      }
+      break;
+
+     //============================================= Free parameter
+    case IS_PARAMETER:
+
+      //=================== Support for named free parameters
+      if ( (options & POPT_ALLOW_NAMED_PARAMS) &&
+            /* Test if using = or : is allowed at all */
+           ( (options & (POPT_NOT_USE_EQUAL_SIGN|POPT_NOT_USE_COLON_SIGN)) != 
+                        (POPT_NOT_USE_EQUAL_SIGN|POPT_NOT_USE_COLON_SIGN) 
+           )
+         )
+      {
+        // currently optarg is same as opt
+        while (*opt)
+        {
+          if      ( (*opt=='=') && !(options&POPT_NOT_USE_EQUAL_SIGN) ) break;
+          else if ( (*opt==':') && !(options&POPT_NOT_USE_COLON_SIGN) ) break;
+          opt++;
+        }
+        if ( *opt && (opt>optarg) )
+        {
+          optlen     = (int)(opt-optarg);
+          optarg     = opt+1; // Skip delim
+          optarglen -= optlen+1;
+        }
+        else opt=NULL;
+
+        //DEBUGMSG: fprintf(stderr,"Opt %s is a long opt %.*s, val: %.*s\n",arg,optlen,opt,optarglen,opt?opt:"");
+
+        // If free parameter name is given
+        if (opt)
+        {
+          // Find definition in opts
+          optr=opts;cnt=opts_cnt;
+          if (options&POPT_IGNORE_CASE)
+          {
+            while ( cnt) 
+            {
+              if ( !optr->short_opt && !optr->long_opt /* is a free param */ && optr->arg_name &&
+                   !STRNCASECMP( (const char*) optr->arg_name,(const char*) opt,optlen) && !optr->arg_name[optlen] 
+                 ) break;
+              cnt--; optr++; 
+            }
+          }
+          else
+          {
+            while ( cnt) 
+            {
+              if ( !optr->short_opt && !optr->long_opt /* is a free param */ && optr->arg_name &&
+                   !strncmp( (const char*) optr->arg_name,(const char*) opt,optlen) && !optr->arg_name[optlen] 
+                 ) break;
+              cnt--; optr++; 
+            }
+          }
+
+          if (!cnt) 
+          {
+            if (!(options&POPT_QUIET)) _parseopt_error( "%s: unrecognized free parameter name `%.*s'\n",exename,optlen,opt);
+            FATAL_ERROR(ERR_POPT_UNKNOWN_OPT);
+          }
+
+          // ============= Free parameter found by name, so let's exit from case statement
+          break;
+        }
+
+      }
+
+      //=================== Find a first not filled free parameter definition 
+      
+      optr=opts;cnt=opts_cnt;
+      while ( cnt) 
+      {
+		  if ( !optr->short_opt && !optr->long_opt /* is a free param */ && (optr->occurences<optr->occ_max) ) break;
+        cnt--; optr++; 
+      }
+      if (! cnt) /* No not defined parameters left */
+      {
+        if (options&POPT_NOTALLOW_UNPARSED_PARAMS)
+        {
+          if (!(options&POPT_QUIET)) _parseopt_error( "%s: unexpected free parameter: %s\n",exename,opt);
+          FATAL_ERROR(ERR_POPT_UNKNOWN_PARAM);
+        }
+        else 
+        {
+          // Let's move out this parameter to the end of parameters array
+          if ( argidx<(argc-2) )
+            memmove( (void*) &argv[argidx],(void*) &argv[argidx+1],sizeof(exename)*(argc-argidx-1) );
+          argc--; // Decrease argument counter
+          argidx--;// Decrease index - it will be increased in for() loop 
+
+          //=================== C O N T I N U E   A   M A I N   L O O P
+          continue;
+        }
+      }
+
+#if 0 /* Old definition */
+      if (optmult.arrcnt>0)
+      {
+        // There's an option array
+        optr=&optmult.op;
+      }
+      else
+      {
+        //DEBUGMSG: fprintf(stderr,"Opt %s is a free parameter %.*s\n",arg,optlen,opt);
+        optr=&opts[freeparidx];
+        while(freeparidx<opts_cnt)
+        {
+          if (!optr->short_opt && !optr->long_opt) break;
+          optr++;
+          freeparidx++;
+        }
+        if (freeparidx<opts_cnt)
+        {
+          //We've found and definition for this paramater in opts
+          if (optr->val_type == otMultipier)
+          {
+            // This is a special definition, that states that we should treat previous
+            // parameter as an array of params.
+            // Let's check correctness of parameters
+            // Previous parameter must be and free param and not be a multipier
+            if ( (optr->opt_max.i<2) || ((optr->has_arg!=PO_REQUIRED_ARG) && (optr->has_arg!=PO_OPTIONAL_ARG)) )
+            {
+              // 
+              FATAL_INTERROR(ERR_POPT_INVALID_PAR,freeparidx);
+            }
+            --optr;
+            if (optr->short_opt || optr->long_opt || (optr->val_type == otMultipier) )
+            {
+              FATAL_INTERROR(ERR_POPT_INVALID_PAR,freeparidx);
+            }
+            optmult.op = *optr;
+            optr++;
+            optmult.op.has_arg  = optr->has_arg;
+            if (optr->arg_name) optmult.op.arg_name = optr->arg_name;
+            if (optr->desc)     optmult.op.desc     = optr->desc;
+
+            
+            // There's an option array
+            optmult.arrcnt=optr->opt_max.i;
+            optmult.elcnt=optr->val.i;
+
+            // We assume, that previous parameter is an first array element,
+            // so let's decrease array counter and increase index and pointers
+
+            optmult.arrcnt--;
+            if (optmult.elcnt) *optmult.elcnt=1;
+
+            // Update array pointer
+            switch (optmult.op.val_type)
+            {
+              case otString: 
+              case otChar:   optmult.op.val.c++; break;
+              case otInt:    optmult.op.val.i++; break;
+              case otFloat:  optmult.op.val.f++; break;
+              case otBool:   optmult.op.val.b++; break;
+              case otList:   optmult.op.val.i++; break;
+              default: break; // Suppressing warning...
+            }
+            optr = &optmult.op;
+
+          }
+
+          freeparidx++;
+        }
+        else if (options&POPT_NOTALLOW_UNPARSED_PARAMS)
+        {
+          if (!(options&POPT_QUIET)) _parseopt_error( "%s: unexpected free parameter: %s\n",exename,opt);
+          FATAL_ERROR(ERR_POPT_UNKNOWN_PARAM);
+        }
+        else 
+        {
+          // Let's move out this parameter to the end of parameters array
+          if ( argidx<(argc-2) )
+            memmove( (void*) &argv[argidx],(void*) &argv[argidx+1],sizeof(exename)*(argc-argidx-1) );
+          argc--; // Decrease argument counter
+          argidx--;// Decrease index - it will be increased in for() loop 
+          continue;
+        }
+      }
+#endif /* ennd of old definition */
+      break;
+      
+
+    } /* switch(par_type) */
+
+    // Parametr found. Check maximum allowed occurences
+    if ( optr->occurences>=optr->occ_max)
+    {
+        if (!(options&POPT_QUIET)) 
+        {
+          if (par_type==IS_PARAMETER)
+          {
+            if (optr->arg_name)
+            {
+              _parseopt_error("%s: positional parameter `%s' passed too many times. Only %d occurencess allowed.\n",
+                           exename,optr->arg_name,optr->occ_max);
+            }
+            else
+            {
+              // Find index
+              int idx=0;
+              for (cnt=0; cnt<opts_cnt ; cnt++) 
+              {
+                if ( !opts[cnt].short_opt && !opts[cnt].long_opt /* is a free param */) idx++;
+                if (  &opts[cnt]==optr ) break;
+              }
+
+              _parseopt_error("%s: positional parameter %d passed too many times. Only %d occurencess allowed.\n",
+                           exename,idx,optr->occ_max);
+            }
+          }
+          else
+          {
+            _parseopt_error( "%s: option `%.*s' passed too many times. Only %d occurencess allowed.\n",
+                           exename,optlen+((unsigned)(opt-arg)),arg,optr->occ_max);
+          }
+        }
+        FATAL_ERROR(ERR_POPT_UNKNOWN_PARAM);
+    };
+
+    
+    //DEBUGMSG: if (optr) fprintf(stderr,"  opt definition found: %d - %s\n",((unsigned)(optr-opts)),optr->desc ) ;
+
+    //=============================================================================================================================================
+    //=== Now let's check if we have a requried parameter
+    //=============================================================================================================================================
+    switch(optr->has_arg)
+    {
+    case PO_OPTIONAL_ARG:
+      // Optional argument must be passed intentionally with --opt=arg syntax
+      break;
+    case PO_REQUIRED_ARG:
+      // if there's no argument connected with option, we read next from cmdline
+      if (!optarg && (argidx<(argc-1)) && (*argv[argidx+1]!='-') )
+      {
+        //Check, if next argument isn't an option
+        optarg=argv[argidx+1];
+        optarglen=strlen(optarg);
+        skip_next_param=1; // This argument will be skiped in main loop 
+      }
+      if (!optarg && (optr->has_arg==PO_REQUIRED_ARG) )
+      {
+        if (!(options&POPT_QUIET)) _parseopt_error( "%s: option `%.*s' requires an argument\n",
+                                                  exename,optlen+((unsigned)(opt-arg)),arg);
+        FATAL_ERROR(ERR_POPT_NO_REQ_PARAM);
+      }
+      break;
+    case PO_NO_ARG:
+      if (optarg)
+      {
+        if (!(options&POPT_QUIET)) _parseopt_error( "%s: option `%.*s' doesn't allow an argument\n",
+                                                  exename,optlen+((unsigned)(opt-arg)),arg);
+        FATAL_ERROR(ERR_POPT_UNKNOWN_PARAM);
+      }
+      break;
+    default:
+      // Find index of bad option
+      for (cnt=0;cnt<opts_cnt; cnt++) if ( &opts[cnt] == optr) break;
+      FATAL_INTERROR(ERR_POPT_INVALID_PAR,cnt);
+      break;
+    }
+
+    // =============  For these types, parameter shall be trimed
+    if ( optr->val_type==otInt || 
+         optr->val_type==otFloat || 
+         optr->val_type==otBool || 
+         optr->val_type==otList )
+    {
+
+      optarg=get_trim_str(optarg,&optarglen);
+      //TODO: check if trimmed optarg must be null terminated
+    }
+
+
+    //=============================================================================================================================================
+    //=== Convert parameter to destination format
+    //=============================================================================================================================================
+
+    // ============= Calculate output variable address for array outputs
+    // All union elements must be addresses, so this construction is safe
+    valptr.v = (void*) ( ((unsigned char*) optr->val.v) + (optr->occurences*((optr->elem_size>0)?optr->elem_size:0)) );
+
+    //============================================= CALLBACK
+    if (optr->val_type==otCallback) 
+    {
+      // we break parsingiIf return code from callback <>0
+      if ( (c=(*optr->val.cb)(optr,optarg)) )
+      {
+        if (!(options&POPT_QUIET)) 
+        {
+          if (par_type==IS_PARAMETER)
+          {
+            switch(c)
+            {
+            case ERR_POPT_RANGE         : /* option`s or free parameter is ouside defined range  */
+              _parseopt_error("%s: Positional parameter `%s' is not in defined range",exename,optarg);
+              break;
+            case ERR_POPT_SYNTAX        : /* syntax error */
+            case ERR_POPT_UNKNOWN_OPT   : /* undefined option  */
+            case ERR_POPT_UNKNOWN_PARAM : /* unknown or unexpected parameter found */
+            case ERR_POPT_CONVERSION    : /* error during parameter conversion  */
+              _parseopt_error("%s: Positional parameter `%s' has invalid format\n",exename,optarg);
+              break;
+            case ERR_POPT_NO_REQ_PARAM  : /* required parameter not found  */
+              _parseopt_error("%s: Positional parameter `%s' requires an argument\n",exename,optarg);
+              break;
+            }
+          }
+          else
+          {
+            switch(c)
+            {
+            case ERR_POPT_RANGE         : /* option`s or free parameter is ouside defined range  */
+            _parseopt_error("%s: Parameter `%s' for option `%.*s' is not in defined range\n",
+                            exename,optarg,optlen+((unsigned)(opt-arg)),arg);
+              break;
+            case ERR_POPT_SYNTAX        : /* syntax error */
+            case ERR_POPT_UNKNOWN_OPT   : /* undefined option  */
+            case ERR_POPT_UNKNOWN_PARAM : /* unknown or unexpected parameter found */
+            case ERR_POPT_CONVERSION    : /* error during parameter conversion  */
+            _parseopt_error("%s: Parameter `%s' for option `%.*s' has invalid format\n",
+                            exename,optarg,optlen+((unsigned)(opt-arg)),arg);
+              break;
+            case ERR_POPT_NO_REQ_PARAM  : /* required parameter not found  */
+            _parseopt_error("%s: Parameter `%s' for option `%.*s' requires an argument\n",
+                            exename,optarg,optlen+((unsigned)(opt-arg)),arg);
+              break;
+            }
+          }
+        }
+       FATAL_ERROR(c);
+      }
+
+      goto CONTINUE;  //=================== C O N T I N U E   A   M A I N   L O O P
+    }
+
+
+    // =================== Set default value, if no option parameter is passed
+    if (optr->has_arg==PO_NO_ARG ||(optr->has_arg==PO_OPTIONAL_ARG && !optarg))
+    {
+      switch (optr->val_type) {
+        case otString:
+        case otChar:  ELOPSET (optr->elem_size, *valptr.c, optr->opt_def.c); break;
+        case otInt:   ELOP    (optr->elem_size, *valptr.i, optr->opt_def.i); break;
+        case otFloat: ELOPARTM(optr->elem_size, *valptr.f, optr->opt_def.f); break;
+        case otBool:  ELOP    (optr->elem_size, *valptr.b, optr->opt_def.b); break;
+        case otList:  ELOP    (optr->elem_size, *valptr.i, optr->opt_def.l->Id); break;
+        default: break; // Suppressing GCC warning...
+      }
+
+      goto CONTINUE;  //=================== C O N T I N U E   A   M A I N   L O O P
+    } 
+
+    // =================== Non calback parameters
+    switch (optr->val_type) 
+    {
+    //============================================= CHAR
+      case otChar:  *valptr.c=optarg; break;
+    //============================================= STRING
+      case otString:
+        if (optarg) {
+          //WARN: Here we changing string passed in argv[]
+          //It safe, because string formatted in C-like manner is always longer than result string
+          CStrToStr(optarg,optarglen,optarg,optarglen);
+        }
+        ELOPSET (optr->elem_size, *valptr.c, optarg); 
+        break;
+    //============================================= LIST
+      case otList:
+        // list definition is in opt_min.l
+        if (!optr->opt_min.l) FATAL_ERROR(ERR_POPT_INVALID_PAR);
+
+        {
+          opt_val_listitem_t* opl;
+          opt_val_listitem_t* op;
+          struct {
+            const char* pAlias;
+            unsigned    iLen;
+          }              aliases[MAX_ALIASES];
+          int            cnt,al_cnt;
+          const char     *bufb=NULL,*bufe=NULL, *ptr=NULL;
+          char           cr;
+          char           *name, *namelist, *namelistend;
+          unsigned       name_len;
+          int            optval=0; // Final value of option (sum of values of each item)
+          
+          // support for set of items, separated by ","
+          namelist    = optarg;
+          namelistend = optarg+optarglen;
+          while (namelist<namelistend)
+          { 
+            name=NULL; // one item from list names list
+            ptr=NULL;  // end of item
+            while (namelist<namelistend)
+            {
+              if (*namelist==',')
+              {
+                namelist++;
+                break; // separato reached;
+              }
+              else if ( !isspace(*namelist) )
+              {
+                // Skip spaces at the beggining and the end of name
+                if (!name) name = namelist;
+                ptr = namelist;
+              }
+              namelist++;
+            }
+            if (!name) continue;
+            
+            name_len = (unsigned int)(ptr-name)+1;
+
+            opl = optr->opt_min.l;
+            op  = NULL;
+            while (opl->Name)
+            {
+
+              // Parse aliases definition as list of strings separated by '|'
+              ptr = opl->Name;
+              al_cnt=0; bufb=NULL;
+
+              while ( (cr=*ptr) ) {
+                if (!isspace(cr) && cr!='|') { // Skip white characters at begin and end of alias
+                  if (! bufb ) bufb = ptr; 
+                  bufe = ptr;
+                }
+                if (cr == '|') {
+                  if (al_cnt>=MAX_ALIASES-1) break;
+                  if (bufb && bufe) {
+                    aliases[al_cnt].pAlias = bufb;
+                    aliases[al_cnt].iLen   = (unsigned) (bufe-bufb+1);
+                    al_cnt++; bufb=NULL;
+                  }
+                }
+                ptr++;
+              }
+              if (bufb && bufe) { // Add rest
+                aliases[al_cnt].pAlias = bufb;
+                aliases[al_cnt].iLen   = (unsigned) (bufe-bufb+1);
+                al_cnt++; bufb=NULL;
+              }
+
+              for (cnt=0;cnt<al_cnt; cnt++) {
+                if ( (name_len==aliases[cnt].iLen) && 
+                     !STRNCASECMP(aliases[cnt].pAlias,name,name_len) )
+                {
+                  op = opl;
+                  break;
+                }
+              }
+              opl++;
+            } /* end  while (opl->Name) */
+
+            if (op) {
+              optval = (optval & op->Mask) | op->Id;
+            }
+            else 
+            {
+              
+              if (!(options&POPT_QUIET)) 
+              {
+                if (par_type==IS_PARAMETER)
+                  _parseopt_error("%s: Positional parameter `%s' not in defined list\n",
+                      exename,name);
+                else
+                  _parseopt_error("%s: Parameter %s for option `%.*s' not in defined list\n",
+                                  exename,name,optlen+((unsigned)(opt-arg)),arg);
+              }
+              FATAL_ERROR(ERR_POPT_INVALID_PAR);
+            } /*end if (op)*/
+          } /* end while (optarglen) */
+          
+          ELOP(optr->elem_size, *valptr.i, optval);
+        } 
+        break;
+
+			//============================================= INT
+      case otInt:
+        {
+          int optval =strtol(optarg,&tail,0);
+          // Let's check if conversion was done without errors
+          if (tail && (((size_t)(tail-optarg))<optarglen) ) 
+          {
+            if (!(options&POPT_QUIET)) 
+            {
+              if (par_type==IS_PARAMETER)
+                _parseopt_error("%s: Positional parameter `%s' is not valid integer value\n",
+                    exename,optarg);
+              else
+                _parseopt_error("%s: Parameter `%s' for option `%.*s' is not valid integer value\n",
+                                exename,optarg,optlen+((unsigned)(opt-arg)),arg);
+            }
+            FATAL_ERROR(ERR_POPT_CONVERSION);
+          }
+
+          // Let's check range
+          if ((optr->opt_min.i<=optr->opt_max.i) && 
+              (optval<optr->opt_min.i || optval>optr->opt_max.i))
+          {
+            if (!(options&POPT_QUIET)) 
+            {
+              if (par_type==IS_PARAMETER)
+                _parseopt_error("%s: Positional parameter `%s' is not in defined range %d..%d\n",
+                    exename,optarg,optr->opt_min.i,optr->opt_max.i);
+              else
+                _parseopt_error("%s: Parameter `%s' for option `%.*s' is not in defined range %d..%d\n",
+                                exename,optarg,optlen+((unsigned)(opt-arg)),arg,
+                                optr->opt_min.i,optr->opt_max.i);
+            }
+            FATAL_ERROR(ERR_POPT_CONVERSION);
+
+          }
+          
+          ELOP(optr->elem_size, *valptr.i, optval);
+        }
+        break;
+
+    //============================================= FLOAT
+      case otFloat:
+        {
+          double optval = strtod(optarg,&tail);
+          // Let's check if conversion was done without errors
+          if (tail && (((size_t)(tail-optarg))<optarglen) ) 
+          {
+            if (!(options&POPT_QUIET)) 
+            {
+              if (par_type==IS_PARAMETER)
+                _parseopt_error("%s: Positional parameter `%s' is not valid floating point value\n",
+                    exename,optarg);
+              else
+                _parseopt_error("%s: Parameter `%s' for option `%.*s' is not valid floating point value\n",
+                                exename,optarg,optlen+((unsigned)(opt-arg)),arg);
+            }
+            FATAL_ERROR(ERR_POPT_CONVERSION);
+          }
+
+          // Let's check range
+          if ((optr->opt_min.f<=optr->opt_max.f) && 
+              (optval<optr->opt_min.f || optval>optr->opt_max.f))
+          {
+            if (!(options&POPT_QUIET)) 
+            {
+              if (par_type==IS_PARAMETER)
+                _parseopt_error("%s: Positional parameter `%s' is not in defined range %f..%f\n",
+                    exename,optarg,optr->opt_min.f,optr->opt_max.f);
+              else
+                _parseopt_error("%s: Parameter `%s' for option `%.*s' is not in defined range %f..%f\n",
+                                exename,optarg,optlen+((unsigned)(opt-arg)),arg,
+                                optr->opt_min.f,optr->opt_max.f);
+            }
+            FATAL_ERROR(ERR_POPT_CONVERSION);
+
+          }
+
+          ELOPARTM(optr->elem_size, *valptr.f, optval);
+        }
+        
+        break;
+
+
+
+    //============================================= BOOL
+      case otBool:
+        {
+          char optval=0;
+          if      (str_is_in_case(optarg,optarglen,OPT_BOOL_TRUE_VALS)>=0)  optval=optr->opt_def.b;
+          else if (str_is_in_case(optarg,optarglen,OPT_BOOL_FALSE_VALS)>=0) optval=optr->opt_min.b;
+          else
+          {
+            if (!(options&POPT_QUIET)) 
+            {
+              if (par_type==IS_PARAMETER)
+                _parseopt_error("%s: Positional parameter `%s' is not valid bool alias\n",
+                    exename,optarg);
+              else
+                _parseopt_error("%s: Parameter `%s' for option `%.*s' is not valid bool alias\n",
+                                exename,optarg,optlen+((unsigned)(opt-arg)),arg);
+            }
+            FATAL_ERROR(ERR_POPT_CONVERSION);
+          }
+
+          ELOP(optr->elem_size, *valptr.b, optval);
+        }
+      
+        break;
+
+      default: break; // Suppressing GCC warning...
+
+    }
+
+CONTINUE:
+    // Parametr found, Increase it occurences counter
+    optr->occurences++;
+
+
+
+  } // ================     E N D   O F   M A I N   L O O P      =================
+
+  // ====  After parsing all opts, check if all required free parameters were available
+  optr=&opts[freeparidx];
+  for (optr=opts, cnt=0; cnt<opts_cnt; optr++, cnt++)
+  {
+    if (!optr->short_opt && !optr->long_opt && (optr->has_arg==PO_REQUIRED_ARG) && !optr->occurences )
+    {
+      if (!(options&POPT_QUIET)) 
+        _parseopt_error( "%s: Required positional parameter <%s> is not defined\n",
+						exename,optr->arg_name);
+      FATAL_ERROR(ERR_POPT_NO_REQ_PARAM);
+    }
+  }
+
+
+parse_opt_end:
+
+  return (err<<16) | (argidx&0xFFFF);
+}
+

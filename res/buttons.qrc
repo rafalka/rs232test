@@ -1,0 +1,19 @@
+<RCC>
+    <qresource prefix="/btn/16">
+        <file>16/configure.png</file>
+        <file>16/connect_creating.png</file>
+        <file>16/connect_established.png</file>
+        <file>16/go-jump-locationbar.png</file>
+        <file>16/misc.png</file>
+        <file>16/bookmarks.png</file>
+        <file>16/view-history.png</file>
+    </qresource>
+    <qresource prefix="/btn/22">
+        <file>22/configure.png</file>
+        <file>22/connect_creating.png</file>
+        <file>22/connect_established.png</file>
+        <file>22/go-jump-locationbar.png</file>
+        <file>22/bookmarks.png</file>
+        <file>22/view-history.png</file>
+    </qresource>
+</RCC>

@@ -24,6 +24,7 @@
 //======================================================= Utils Functs
 
 QString TextToHtml(const char* str, size_t size);
+QString StrToCStrString(const char* str, size_t size);
 
 uint8_t calcFCS(const QByteArray& buf);
 
@@ -123,6 +124,24 @@ public:
     virtual QString     convert(QByteArray& buf, QBinStrConv::STR_FORMAT format, uint32_t);
 };
 
+//=======================================================  CStr2bin (C-like formatted string)
+class QCStr2BinConv : public QStrBinConv
+{
+protected:
+    static const char* name;
+public:
+    virtual const char* getName() { return name; }
+    virtual QStrBinConv::VALIDITY convert(QString& str, QByteArray* pOutBuf, int*  );
+};
+
+class QBin2CStrConv : public QBinStrConv
+{
+protected:
+    static const char* name;
+public:
+    virtual const char* getName() { return name; }
+    virtual QString     convert(QByteArray& buf, QBinStrConv::STR_FORMAT format, uint32_t);
+};
 
 //======================================================= hex2bin and bin2hex
 class QHexStr2BinConv : public QStrBinConv
@@ -188,6 +207,7 @@ public:
     typedef enum {
         CONV_HEX,
         CONV_ASCII,
+        CONV_CSTR,
 
         __CONV_CNT
     } converters_t;
@@ -205,6 +225,7 @@ public:
     typedef enum {
         CONV_HEX,
         CONV_ASCII,
+        CONV_CSTR,
 
         __CONV_CNT
     } converters_t;

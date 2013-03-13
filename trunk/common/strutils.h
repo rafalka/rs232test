@@ -217,7 +217,7 @@ int str_is_in_case(char* str,size_t strsize,...);
  * 
  * @return length of string copied to outstr
  */
-size_t CStrToStr(char* str, size_t strsize, char* outstr, size_t outstrsize);
+size_t CStrToStr(const char* str, size_t strsize, char* outstr, size_t outstrsize);
 
 /**
  * Function splits <str> into parameters following bash shell splitting rules.

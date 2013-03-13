@@ -42,7 +42,7 @@ BinaryEditor::BinaryEditor(QWidget *parent) :
     connectInputEditor(hex_editor);
     connectInputEditor(txt_editor);
 
-    setEditMode(INMODE_ASCII);
+    setEditMode(INMODE_TEXT);
 
 }
 
@@ -71,7 +71,7 @@ void BinaryEditor::connectInputEditor(InputEditorAbstract *editor)
     ASSERT_ALWAYS( connect(editor, SIGNAL( inputChanged() ),             SLOT( onEditorDataChanged() )              ) );
 }
 
-void BinaryEditor::setEditMode(BinaryEditor::input_modes_t mode)
+void BinaryEditor::setEditMode(BinaryEditor::input_modes_t mode, bool forceRefresh )
 {
     InputEditorAbstract* new_editor=NULL;
 
@@ -81,14 +81,14 @@ void BinaryEditor::setEditMode(BinaryEditor::input_modes_t mode)
         setCurrentWidget(ui->hexInPage);
         new_editor = hex_editor;
         break;
-    case INMODE_ASCII:
+    case INMODE_TEXT:
     default:
         setCurrentWidget(ui->txtInPage);
         new_editor = txt_editor;
-        mode = INMODE_ASCII;
+        mode = INMODE_TEXT;
     }
 
-    if (current_editor!=new_editor)
+    if ( (current_editor!=new_editor) || forceRefresh )
     {
         if (current_editor) updateDataCache(current_editor->getInputData());
         current_editor=new_editor;
@@ -99,6 +99,24 @@ void BinaryEditor::setEditMode(BinaryEditor::input_modes_t mode)
             _data_cache_valid = false;
     }
 }
+
+void BinaryEditor::setTextModeCoverters(QStrBinConv *inputConverter, QBinStrConv *displayConverter)
+{
+    if ( current_editor==txt_editor )
+    {
+        updateDataCache( current_editor->getInputData() );
+    }
+
+    txt_editor->setInputConv( inputConverter );
+    txt_editor->setDisplayConv( displayConverter );
+
+    if ( current_editor==txt_editor )
+    {
+        current_editor->setInputData(_data_cache);
+        _data_cache_valid = false;
+    }
+}
+
 
 void BinaryEditor::onEditorCurrentAddressChanged(int address)
 {

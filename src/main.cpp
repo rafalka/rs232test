@@ -108,6 +108,7 @@ opt_val_listitem_t   AppCommandLineParams::inmode_list[] =
 {
     {MainWindow::INMODE_HEX,   "hex|h",       "HEX",     0 },
     {MainWindow::INMODE_ASCII, "ascii|a",     "ASCII",   0 },
+    {MainWindow::INMODE_CSTR,  "cstr|c",      "C-like string",   0 },
     {0,           NULL,          NULL,                0 } // List terminator
 };
 

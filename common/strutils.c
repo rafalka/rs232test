@@ -373,7 +373,7 @@ int str_is_in_case(char* str,size_t strsize,...)
  *   \ooo ooo  #000      decimal value
  *   \xhh hh   #$hh      hexadecimal value
  *   \oOO oo   #0oo      octal value
- * na ³añcuch zwyk³y i zapisuje outstrsize znaków w outstr
+ * to plain string and store it in output buffer
  * Because input string will be always longer than output 
  * string, str and outstr can overlap. 
  * 
@@ -384,9 +384,10 @@ int str_is_in_case(char* str,size_t strsize,...)
  * 
  * @return length of string copied to outstr
  */
-size_t CStrToStr(char* str, size_t strsize, char* outstr, size_t outstrsize)
+size_t CStrToStr(const char* str, size_t strsize, char* outstr, size_t outstrsize)
 {
-  char        *strend, *outend;
+  const char  *strend;
+  char        *outend;
   char        *bufpos=NULL;
   char        c;
   char        sign=0;
@@ -403,17 +404,20 @@ size_t CStrToStr(char* str, size_t strsize, char* outstr, size_t outstrsize)
       c=*(str++);
       switch (c){
         case 'n': c=10;
-#ifdef WIN32
-          if (bufpos<outend) *(bufpos++)=13;
-#endif
+//#ifdef WIN32
+//          if (bufpos<outend) *(bufpos++)=13;
+//#endif
                   break;
-        case 't': c=9;break;
-        case 'v': c=11;break;
-        case 'b': c=8;break;
-        case 'r': c=13;break;
-        case 'l': c=10;break;
-        case 'f': c=12;break;
-        case 'x': 
+      case 't': c='\t';break;
+      case 'v': c='\v';break;
+      case 'b': c='\b';break;
+      case 'r': c='\r';break;
+        //case 'l': c=10;break;
+      case 'f': c='\f';break;
+      case '?': c='\?';break;
+      case '\'': c='\'';break;
+      case '\"': c='\"';break;
+        case 'x':
           if (str<strend) {
             c=0;
             if (*str=='-') {sign=1; str++; } else sign=0;

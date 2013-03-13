@@ -241,16 +241,24 @@ void MainWindow::prepareInputModes()
 
     inm = &input_modes[INMODE_HEX];
     inm->name = "HEX";
-    inm->converter = QBinStrConvCollection::getConv(QBinStrConvCollection::CONV_HEX);
+    inm->input_converter = NULL;
+    inm->display_converter = QBinStrConvCollection::getConv(QBinStrConvCollection::CONV_HEX);
     inm->edit_mode = BinaryEditor::INMODE_HEX;
     inm->editor = ui->binaryEditor;
 
     inm = &input_modes[INMODE_ASCII];
     inm->name = "ASCII";
-    inm->converter = QBinStrConvCollection::getConv(QBinStrConvCollection::CONV_ASCII);
-    inm->edit_mode = BinaryEditor::INMODE_ASCII;
+    inm->input_converter   = QStrBinConvCollection::getConv(QStrBinConvCollection::CONV_ASCII);
+    inm->display_converter = QBinStrConvCollection::getConv(QBinStrConvCollection::CONV_ASCII);
+    inm->edit_mode = BinaryEditor::INMODE_TEXT;
     inm->editor = ui->binaryEditor;
 
+    inm = &input_modes[INMODE_CSTR];
+    inm->name = "C-like string";
+    inm->input_converter   = QStrBinConvCollection::getConv(QStrBinConvCollection::CONV_CSTR);
+    inm->display_converter = QBinStrConvCollection::getConv(QBinStrConvCollection::CONV_CSTR);
+    inm->edit_mode = BinaryEditor::INMODE_TEXT;
+    inm->editor = ui->binaryEditor;
 
 }
 
@@ -263,7 +271,11 @@ void MainWindow::selectInputMode(MainWindow::input_modes_t mode)
         ui->binaryEditor->setEditMode(BinaryEditor::INMODE_HEX);
         break;
     case INMODE_ASCII:
-        ui->binaryEditor->setEditMode(BinaryEditor::INMODE_ASCII);
+    case INMODE_CSTR:
+        ui->binaryEditor->setTextModeCoverters(
+                    input_modes[mode].input_converter   ,
+                    input_modes[mode].display_converter );
+        ui->binaryEditor->setEditMode(BinaryEditor::INMODE_TEXT);
     default:
         mode = INMODE_ASCII;
     }
@@ -508,7 +520,7 @@ void MainWindow::inputMacrosAddTriggered()
                                  tr("Add macro..."),
                                  tr("Macro name:"),
                                  QLineEdit::Normal,
-                                 inm.converter->convert( buf, QBinStrConv::PLAIN_TEXT, QBinStrConv::OUTB_SIMPLE ),
+                                 inm.display_converter->convert( buf, QBinStrConv::PLAIN_TEXT, QBinStrConv::OUTB_SIMPLE ),
                                  &ok);
 
             if (ok && !text.isEmpty())
@@ -596,7 +608,7 @@ void MainWindow::updateInputModeHistoryMenu()
 
         arr = n.toByteArray();
         act = input_mode_history_menu.addAction(
-                    inm.converter->convert( arr, QBinStrConv::PLAIN_TEXT, QBinStrConv::OUTB_SIMPLE ),
+                    inm.display_converter->convert( arr, QBinStrConv::PLAIN_TEXT, QBinStrConv::OUTB_SIMPLE ),
                     this,
                     SLOT(inputHistoryTriggered())
               );

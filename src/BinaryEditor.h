@@ -124,13 +124,14 @@ protected:
     void                 updateDataCache() { if (!_data_cache_valid) {updateDataCache(current_editor->getInputData()); } }
 public:
     typedef enum {
-        INMODE_ASCII,
+        INMODE_TEXT,
         INMODE_HEX,
 
         __INMODES_CNT
     } input_modes_t;
 
-    void       setEditMode(input_modes_t mode);
+    void       setEditMode(input_modes_t mode, bool forceRefresh = false );
+    void       setTextModeCoverters(QStrBinConv* inputConverter, QBinStrConv*  displayConverter);
 
     QByteArray getInputData()
     {
@@ -158,8 +159,6 @@ public:
     }
     int        getCurrentPos()                { return current_editor->getCurrentPos(); }
     bool       getOverwriteMode()             { return current_editor->getOverwriteMode(); }
-
-
 
     explicit BinaryEditor(QWidget *parent = 0);
     ~BinaryEditor();

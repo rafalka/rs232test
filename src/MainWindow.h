@@ -97,13 +97,14 @@ protected:
     BinaryEditor*               editor;
     BinaryEditor::input_modes_t edit_mode;
 
-    QBinStrConv*         converter;
+    QStrBinConv*         input_converter;
+    QBinStrConv*         display_converter;
 
     QVariantList         history;
     QVariantMap          macros;
 
 public:
-    bool       isValid()       { return (editor && converter); }
+    bool       isValid()       { return (editor && display_converter); }
     QByteArray        getEditorData() { return (editor) ? editor->getInputData(): QByteArray() ; }
     const QByteArray* getEditorConstData() { return (editor) ? &editor->getInputConstData(): NULL ; }
     void       setEditorData(QByteArray& data) { if (editor) editor->setInputData(data); }
@@ -146,6 +147,7 @@ public:
     typedef enum {
         INMODE_HEX,
         INMODE_ASCII,
+        INMODE_CSTR,
 
         __INMODES_CNT
     } input_modes_t;

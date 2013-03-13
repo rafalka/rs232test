@@ -14,7 +14,7 @@
 
 #include <wctype.h>
 #include "strbinconv.h"
-
+#include "strutils.h"
 
 QString TextToHtml(const char* str, size_t size)
 {
@@ -79,6 +79,88 @@ QString TextToHtml(const char* str, size_t size)
     return s;
 }
 
+QString StrToCStrString(const char* str, size_t size)
+{
+    QString s;
+    if ( str && size )
+    {
+        char     c;
+        QChar    qc;
+        QString  qs;
+
+        s.reserve( size );
+        qs.reserve(5);
+
+        while (size--)
+        {
+            c = *str++;
+            qc = c;
+            if ( ! qc.isPrint())
+            {
+                switch (c)
+                {
+                case '\t': qs="\\t";break;
+                case '\v': qs="\\v";break;
+                case '\b': qs="\\b";break;
+                case '\r': qs="\\r";break;
+                case '\n': qs="\\n";break;
+                case '\f': qs="\\f";break;
+                case '\a': qs="\\a";break;
+                case '\\': qs="\\\\";break;
+                case '\0': qs="\\0";break;
+                    // \?, \', \" skipped here. We'll allow to use this characters directly
+                default:
+                    qs=QString("\\x%1").arg(static_cast<ushort>(c),2,16,QLatin1Char('0') );
+                }
+                s += qs;
+            }
+            else
+            {
+                s += qc;
+            }
+        }
+
+    }
+    return s;
+}
+
+QString StrToCStrString(const QString& str)
+{
+    QString      s;
+    const QChar* qc;
+    char         c;
+
+    int size = str.size();
+    s.reserve( size );
+
+    for ( qc = str.constData(); size>0; qc++, size--)
+    {
+        if ( qc->isPrint() )
+        {
+            s += *qc;
+        }
+        else
+        {
+            c = qc->toLatin1();
+            switch ( c )
+            {
+            case '\t': s+="\\t";break;
+            case '\v': s+="\\v";break;
+            case '\b': s+="\\b";break;
+            case '\r': s+="\\r";break;
+            case '\n': s+="\\n";break;
+            case '\f': s+="\\f";break;
+            case '\a': s+="\\a";break;
+            case '\\': s+="\\\\";break;
+            case '\0': s+="\\0";break;
+                // \?, \', \" skipped here. We'll allow to use this characters directly
+            default:
+                s+=QString("\\x%1").arg(static_cast<ushort>(c),2,16,QLatin1Char('0') );
+            }
+        }
+    }
+    return s;
+}
 
 
 //======================================================= calcFCS
@@ -99,7 +181,7 @@ QString QAsciiBin2StrConv::convert(QByteArray &buf, QBinStrConv::STR_FORMAT form
 {
     return ( format == QBinStrConv::HTML )
             ? TextToHtml( buf.data(), buf.size() )
-            : QString::fromLatin1( buf.data(), buf.size() );
+            : QString::fromLocal8Bit( buf );
 }
 
 
@@ -110,17 +192,50 @@ QStrBinConv::VALIDITY QStr2AsciiBinConv::convert(QString &str, QByteArray* pOutB
 {
     if ( pOutBuf)
     {
-        pOutBuf->append( str.toLatin1() );
+        pOutBuf->append( str.toLocal8Bit() );
     }
     return QStrBinConv::VALID;
 }
 
 
+//======================================================= QStrBinConv
+const char* QCStr2BinConv::name = "C-like formatted string";
+QStrBinConv::VALIDITY QCStr2BinConv::convert(QString &str, QByteArray *pOutBuf, int *)
+{
+    if ( pOutBuf)
+    {
+        int strsize = str.size();
+        if ( strsize > 0 )
+        {
+            pOutBuf->operator =( str.toLocal8Bit() );
+            strsize = static_cast<int>( CStrToStr( pOutBuf->data(), strsize, pOutBuf->data(), strsize ) );
+            pOutBuf->resize( strsize );
+        }
+        return QStrBinConv::VALID;
+    }
+    return QStrBinConv::BUF_TO_SMALL;
+}
+
+
+//======================================================= QBin2CStrConv
+const char* QBin2CStrConv::name = "C-like formatted string";
+QString QBin2CStrConv::convert(QByteArray &buf, QBinStrConv::STR_FORMAT format, uint32_t)
+{
+    QString s = StrToCStrString( QString::fromLocal8Bit(buf) );
+    if (format == QBinStrConv::HTML)
+    {
+        s = s.toHtmlEscaped();
+    }
+
+    return s;
+}
+
 //======================================================= QBinStrConvCollection
-QBinStrConv* QBinStrConvCollection::_convs[] =
+QBinStrConv* QBinStrConvCollection::_convs[__CONV_CNT] =
 {
     new QBin2HexStrConv(),
-    new QAsciiBin2StrConv()
+    new QAsciiBin2StrConv(),
+    new QBin2CStrConv()
 };
 
 
@@ -137,10 +252,11 @@ QBinStrConv* QBinStrConvCollection::getConv(int index)
 
 
 //======================================================= QStrBinConvCollection
-QStrBinConv* QStrBinConvCollection::_convs[] =
+QStrBinConv* QStrBinConvCollection::_convs[__CONV_CNT] =
 {
     new QHexStr2BinConv(),
-    new QStr2AsciiBinConv()
+    new QStr2AsciiBinConv(),
+    new QCStr2BinConv()
 };
 
 
@@ -525,5 +641,4 @@ QStrBinConv::VALIDITY QHexStr2BinConv::convert(QString &str, QByteArray* pOutBuf
 
     return res;
 }
-
 

@@ -529,7 +529,14 @@ QString QBin2HexStrConv::HexToStr( unsigned long address, const unsigned char* b
 
         if (sepRequired) out+=sep;
         //fprintf(out,"%-*s ",ascw,asc);
-        out+=QString(asciifmt).arg(asc,-ascw);
+        if (format==QBinStrConv::HTML)
+        {
+            out+=QString(asciifmt).arg(TextToHtml(asc,r));
+        }
+        else
+        {
+            out+=QString(asciifmt).arg(asc,-ascw);
+        }
         //out+=doc.toHtml();
         sepRequired=1;
       }
@@ -547,8 +554,7 @@ QString QBin2HexStrConv::HexToStr( unsigned long address, const unsigned char* b
         *aptr = 0;
         if (sepRequired) out+=sep;
         //fprintf(out,"%-*S ",ascw,asc);
-        out+=QString(asciifmt).arg(QString::fromWCharArray((wchar_t*)asc,
-aptr-((wchar_t*)asc) ), -ascw);
+        out+=QString(asciifmt).arg(QString::fromWCharArray((wchar_t*)asc, aptr-((wchar_t*)asc) ), -ascw);
         sepRequired=1;
 
       }

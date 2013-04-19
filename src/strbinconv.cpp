@@ -79,6 +79,57 @@ QString TextToHtml(const char* str, size_t size)
     return s;
 }
 
+QString TextToHtml(const QString& str)
+{
+    QString      s;
+    const QChar *pc;
+          QChar  tc;
+    char         c;
+
+    int size = str.size();
+    s.reserve( size );
+
+    for ( pc = str.constData(); size>0; size--)
+    {
+        tc = *pc++;
+        c  = tc.toLatin1();
+        switch(c)
+        {
+        case ' ': s+= "&nbsp;"; break;
+        case '&': s+= "&amp;";  break;
+        case '<': s+= "&lt;";   break;
+        case '>': s+= "&gt;";   break;
+        case '"': s+= "&quot;"; break;
+        case '\r':
+            if (pc->toLatin1()=='\n')
+            {
+                pc++; size--;
+            }
+            s+="<BR>\n";
+            break;
+        case '\n':
+            if (pc->toLatin1()=='\r')
+            {
+                pc++; size--;
+            }
+            s+="<BR>\n";
+            break;
+        default:
+            if( tc.isPrint() )
+            {
+                s += tc;
+            }
+            else
+            {
+                // Put as hex
+                s+=QString("&#x%1").arg(static_cast<ushort>(c),2,16,QLatin1Char('0') );
+            }
+        }
+    }
+
+    return s;
+}
+
 QString StrToCStrString(const char* str, size_t size)
 {
     QString s;
@@ -102,8 +153,29 @@ QString StrToCStrString(const char* str, size_t size)
                 case '\t': qs="\\t";break;
                 case '\v': qs="\\v";break;
                 case '\b': qs="\\b";break;
-                case '\r': qs="\\r";break;
-                case '\n': qs="\\n";break;
+                case '\r':
+                    if (*str=='\n')
+                    {
+                       str++; size--;
+                       qs="\\r\\n\n";
+                    }
+                    else
+                    {
+                        qs="\\r\n";
+                    }
+                    break;
+
+                case '\n':
+                    if (*str=='\r')
+                    {
+                       str++; size--;
+                       qs="\\n\\r\n";
+                    }
+                    else
+                    {
+                        qs="\\n\n";
+                    }
+                    break;
                 case '\f': qs="\\f";break;
                 case '\a': qs="\\a";break;
                 case '\\': qs="\\\\";break;
@@ -128,27 +200,50 @@ QString StrToCStrString(const QString& str)
 {
     QString      s;
     const QChar* qc;
-    char         c;
+    char         c,nc;
 
     int size = str.size();
     s.reserve( size );
 
-    for ( qc = str.constData(); size>0; qc++, size--)
+    for ( qc = str.constData(); size>0; size--)
     {
         if ( qc->isPrint() )
         {
             s += *qc;
+            qc++;
         }
         else
         {
-            c = qc->toLatin1();
+            c  = qc->toLatin1();
+            qc++;
+            nc = qc->toLatin1();
             switch ( c )
             {
             case '\t': s+="\\t";break;
             case '\v': s+="\\v";break;
             case '\b': s+="\\b";break;
-            case '\r': s+="\\r";break;
-            case '\n': s+="\\n";break;
+            case '\r':
+                if (nc=='\n')
+                {
+                    qc++; size--;
+                    s+="\\r\\n\n";
+                }
+                else
+                {
+                    s+="\\r\n";
+                }
+                break;
+            case '\n':
+                if (nc=='\r')
+                {
+                    qc++; size--;
+                    s+="\\n\\r\n";
+                }
+                else
+                {
+                    s+="\\n\n";
+                }
+                break;
             case '\f': s+="\\f";break;
             case '\a': s+="\\a";break;
             case '\\': s+="\\\\";break;
@@ -198,7 +293,7 @@ QStrBinConv::VALIDITY QStr2AsciiBinConv::convert(QString &str, QByteArray* pOutB
 }
 
 
-//======================================================= QStrBinConv
+//======================================================= QCStr2BinConv
 const char* QCStr2BinConv::name = "C-like formatted string";
 QStrBinConv::VALIDITY QCStr2BinConv::convert(QString &str, QByteArray *pOutBuf, int *)
 {
@@ -224,7 +319,7 @@ QString QBin2CStrConv::convert(QByteArray &buf, QBinStrConv::STR_FORMAT format, 
     QString s = StrToCStrString( QString::fromLocal8Bit(buf) );
     if (format == QBinStrConv::HTML)
     {
-        s = s.toHtmlEscaped();
+        s = TextToHtml(s);
     }
 
     return s;

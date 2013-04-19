@@ -18,7 +18,16 @@
     <property name="spacing">
      <number>4</number>
     </property>
-    <property name="margin">
+    <property name="leftMargin">
+     <number>4</number>
+    </property>
+    <property name="topMargin">
+     <number>4</number>
+    </property>
+    <property name="rightMargin">
+     <number>4</number>
+    </property>
+    <property name="bottomMargin">
      <number>4</number>
     </property>
     <item>
@@ -38,7 +47,7 @@
          <string>Setup...</string>
         </property>
         <property name="icon">
-         <iconset resource="res/buttons.qrc">
+         <iconset resource="../res/buttons.qrc">
           <normaloff>:/btn/16/16/configure.png</normaloff>:/btn/16/16/configure.png</iconset>
         </property>
         <property name="toolButtonStyle">
@@ -77,7 +86,7 @@
          <string>Connect</string>
         </property>
         <property name="icon">
-         <iconset resource="res/buttons.qrc">
+         <iconset resource="../res/buttons.qrc">
           <normaloff>:/btn/16/16/connect_creating.png</normaloff>
           <normalon>:/btn/16/16/connect_established.png</normalon>:/btn/16/16/connect_creating.png</iconset>
         </property>
@@ -200,7 +209,7 @@
            <string>Macros</string>
           </property>
           <property name="icon">
-           <iconset resource="res/buttons.qrc">
+           <iconset resource="../res/buttons.qrc">
             <normaloff>:/btn/16/16/bookmarks.png</normaloff>:/btn/16/16/bookmarks.png</iconset>
           </property>
           <property name="popupMode">
@@ -236,7 +245,7 @@
            <string>History</string>
           </property>
           <property name="icon">
-           <iconset resource="res/buttons.qrc">
+           <iconset resource="../res/buttons.qrc">
             <normaloff>:/btn/16/16/view-history.png</normaloff>:/btn/16/16/view-history.png</iconset>
           </property>
           <property name="popupMode">
@@ -268,7 +277,7 @@
            <string>Send</string>
           </property>
           <property name="icon">
-           <iconset resource="res/buttons.qrc">
+           <iconset resource="../res/buttons.qrc">
             <normaloff>:/btn/16/16/go-jump-locationbar.png</normaloff>:/btn/16/16/go-jump-locationbar.png</iconset>
           </property>
           <property name="checkable">
@@ -300,7 +309,7 @@
       <widget class="QPlainTextEdit" name="outputTextEdit">
        <property name="font">
         <font>
-         <family>Consolas</family>
+         <family>Courier New</family>
          <pointsize>8</pointsize>
          <kerning>false</kerning>
         </font>
@@ -333,7 +342,7 @@
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="res/buttons.qrc"/>
+  <include location="../res/buttons.qrc"/>
  </resources>
  <connections/>
 </ui>

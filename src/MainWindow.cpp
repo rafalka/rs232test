@@ -52,6 +52,7 @@ MainWindow::MainWindow(QWidget *parent)
     // allocate convertes
     display_convs[OUTMODE_HEX]   = QBinStrConvCollection::getConv(QBinStrConvCollection::CONV_HEX);
     display_convs[OUTMODE_ASCII] = QBinStrConvCollection::getConv(QBinStrConvCollection::CONV_ASCII);
+    display_convs[OUTMODE_CSTR]  = QBinStrConvCollection::getConv(QBinStrConvCollection::CONV_CSTR);
     if (current_output_mode_idx<0||current_output_mode_idx>=__OUTMODES_CNT) current_output_mode_idx = 0;
 
     createDisplayModeMenu();
@@ -276,6 +277,7 @@ void MainWindow::selectInputMode(MainWindow::input_modes_t mode)
                     input_modes[mode].input_converter   ,
                     input_modes[mode].display_converter );
         ui->binaryEditor->setEditMode(BinaryEditor::INMODE_TEXT);
+        break;
     default:
         mode = INMODE_ASCII;
     }
@@ -431,6 +433,12 @@ void MainWindow::createDisplayModeMenu()
     act = displayModeMenu.addAction("ASCII", this, SLOT(displayModeTriggered()));
     act->setCheckable(true);
     act->setData(OUTMODE_ASCII);
+    if(current_output_mode_idx==OUTMODE_ASCII) act->setChecked(true);
+    menuGroup->addAction(act);
+
+    act = displayModeMenu.addAction("C-like string", this, SLOT(displayModeTriggered()));
+    act->setCheckable(true);
+    act->setData(OUTMODE_CSTR);
     if(current_output_mode_idx==OUTMODE_ASCII) act->setChecked(true);
     menuGroup->addAction(act);
 

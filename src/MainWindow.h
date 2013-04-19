@@ -155,6 +155,7 @@ public:
     typedef enum {
         OUTMODE_HEX,
         OUTMODE_ASCII,
+        OUTMODE_CSTR,
 
         __OUTMODES_CNT
     } output_modes_t;

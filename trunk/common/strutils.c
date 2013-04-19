@@ -395,14 +395,30 @@ size_t CStrToStr(const char* str, size_t strsize, char* outstr, size_t outstrsiz
   if (!str || !strsize || !outstr || !outstrsize) return 0;
 
   strend=str+strsize;
-  outend=outstr+outstrsize;
+  outend=outstr+outstrsize-1/*space for null char*/;
   bufpos=outstr;
-  while (str<strend && bufpos<outend && *str) {
+  while (str<strend && bufpos<outend && *str)
+  {
     c=*(str++);
-    
-    if (c=='\\' && str<strend) {
+    // Skip EOL chars - they must be provided explicit
+    if (c=='\r')
+    {
+        c=*str;
+        if (c=='\n') str++;
+        continue;
+    }
+    else if (c=='\n')
+    {
+        c=*str;
+        if (c=='\r') str++;
+        continue;
+    }
+
+    if (c=='\\' && str<strend)
+    {
       c=*(str++);
-      switch (c){
+      switch (c)
+      {
         case 'n': c=10;
 //#ifdef WIN32
 //          if (bufpos<outend) *(bufpos++)=13;
@@ -454,10 +470,15 @@ size_t CStrToStr(const char* str, size_t strsize, char* outstr, size_t outstrsiz
           break;
       }
     }
-    if (c && bufpos<outend) *(bufpos++)=c;
+    if (c && bufpos<outend)
+        *(bufpos++)=c;
+    else
+        break;
+
   }
 
-  if (bufpos<outend) *bufpos=0;
+  // We reserved space for null char
+  *bufpos=0;
 
   return (size_t) (bufpos-outstr);
 }

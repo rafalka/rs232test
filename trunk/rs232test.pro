@@ -9,7 +9,6 @@ QT       += core gui widgets
 TARGET = rs232test
 TEMPLATE = app
 
-
 SOURCES += \
     src/main.cpp\
     src/MainWindow.cpp \
@@ -79,3 +78,5 @@ release {
     CONFIG -= console
 #    LIBS   +=-lboost_system-mgw46-mt-d-1_52
 }
+
+CONFIG += static

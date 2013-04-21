@@ -30,6 +30,8 @@ class MacrosEditDialog : public QDialog
     Q_OBJECT
 
 protected:
+    bool             content_changed;
+
     explicit MacrosEditDialog(QWidget *parent = 0);
 
     void             reportError(const QString message);
@@ -42,6 +44,7 @@ protected:
     void             setEditMode( BinaryEditor::input_modes_t edit_mode );
     QListWidgetItem* findMacroInList(const QString& name);
     void             updateAddBtn();
+    bool             handleUncommitedContentChange();
 public:
     ~MacrosEditDialog();
     
@@ -63,7 +66,10 @@ public:
 
 protected:
     void changeEvent(QEvent *e);
-    
+public Q_SLOTS:
+    virtual void accept();
+    virtual void reject();
+
 private slots:
 
     void on_macrosList_itemSelectionChanged();
@@ -81,6 +87,8 @@ private slots:
     void on_importBtn_clicked();
 
     void on_delAllBtn_clicked();
+
+    void onMacroBodyEditDataChanged();
 
 private:
     Ui::MacrosEditDialog *ui;

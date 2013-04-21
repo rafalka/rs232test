@@ -29,9 +29,12 @@ static const char* macro_file_dialog_filters =
 
 MacrosEditDialog::MacrosEditDialog(QWidget *parent) :
     QDialog(parent),
+    content_changed(false),
     ui(new Ui::MacrosEditDialog)
 {
     ui->setupUi(this);
+
+    connect(ui->macroBodyEdit, SIGNAL(inputChanged()), SLOT(onMacroBodyEditDataChanged() ) );
 
     ui->verticalLayout_2->setContentsMargins(4, 4, 4, 4);
     ui->horizontalLayout_2->setContentsMargins(4, 4, 4, 4);
@@ -162,6 +165,38 @@ void MacrosEditDialog::updateAddBtn()
     ui->addBtn->setEnabled( (! arg1.isEmpty() ) && ui->macroBodyEdit->getInputSize()>0 );
 }
 
+bool MacrosEditDialog::handleUncommitedContentChange()
+{
+    bool result = true;
+
+    if (content_changed)
+    {
+        int dialog_result =
+                QMessageBox::question(
+                    this,
+                    tr("Editor content changed!"),
+                    tr("There are unsaved changes in currently edited macro\nDo you want to save them?"),
+                    QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
+                    QMessageBox::Yes
+                );
+        switch (dialog_result)
+        {
+        case QMessageBox::Yes:
+            on_addBtn_clicked();
+            content_changed = false;
+            break;
+        case QMessageBox::Cancel:
+            result = false;
+            break;
+        case QMessageBox::No:
+            content_changed = false;
+            break;
+        }
+    }
+
+    return result;
+}
+
 MacrosEditDialog::~MacrosEditDialog()
 {
     delete ui;
@@ -180,15 +215,36 @@ void MacrosEditDialog::changeEvent(QEvent *e)
 }
 
 
+void MacrosEditDialog::accept()
+{
+    if ( handleUncommitedContentChange() )
+    {
+        done(Accepted);
+    }
+}
+
+void MacrosEditDialog::reject()
+{
+    if ( handleUncommitedContentChange() )
+    {
+        done(Rejected);
+    }
+}
+
+
 void MacrosEditDialog::on_macrosList_itemSelectionChanged()
 {
     QListWidgetItem *current = ui->macrosList->currentItem();
+
+    handleUncommitedContentChange();
 
     if (current)
     {
         QByteArray  arr = current->data(Qt::UserRole).toByteArray();
         ui->macroNameEdit->setText( current->text() );
         ui->macroBodyEdit->setInputData(arr);
+
+        content_changed = false;
     }
 
 
@@ -209,13 +265,15 @@ void MacrosEditDialog::on_addBtn_clicked()
     }
     item->setData(Qt::UserRole,ui->macroBodyEdit->getInputData());
 
-     updateAddBtn();
+    updateAddBtn();
+    content_changed = false;
 }
 
 void MacrosEditDialog::on_macroNameEdit_textChanged(const QString &arg1)
 {
     (void)arg1;
     updateAddBtn();
+    content_changed = true;
 }
 
 void MacrosEditDialog::on_delBtn_clicked()
@@ -236,6 +294,7 @@ void MacrosEditDialog::on_delBtn_clicked()
         {
             delete current;
             updateAddBtn();
+            content_changed = false;
         }
     }
 
@@ -254,8 +313,15 @@ void MacrosEditDialog::on_delAllBtn_clicked()
     {
         ui->macrosList->clear();
         updateAddBtn();
+        content_changed = false;
     }
 
+}
+
+void MacrosEditDialog::onMacroBodyEditDataChanged()
+{
+
+    content_changed = true;
 }
 
 void MacrosEditDialog::on_macroBodyEdit_inputSizeChanged(int newsize)
@@ -330,5 +396,3 @@ void MacrosEditDialog::on_importBtn_clicked()
     setData(data,false);
 
 }
-
-

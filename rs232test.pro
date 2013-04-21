@@ -76,7 +76,7 @@ debug {
 
 release {
     CONFIG -= console
+    CONFIG += static
 #    LIBS   +=-lboost_system-mgw46-mt-d-1_52
 }
 
-CONFIG += static

@@ -409,14 +409,14 @@ void QextSerialPortPrivate::updatePortSettings()
 
     //fill struct : COMMTIMEOUTS
     if (settingsDirtyFlags & DFE_TimeOut) {
-        if (_queryMode != QextSerialPort::EventDriven) {
+        if (1 /*_queryMode != QextSerialPort::EventDriven*/) {
             int millisec = Settings.Timeout_Millisec;
             if (millisec == -1) {
                 Win_CommTimeouts.ReadIntervalTimeout = MAXDWORD;
                 Win_CommTimeouts.ReadTotalTimeoutConstant = 0;
             } else {
                 Win_CommTimeouts.ReadIntervalTimeout = millisec;
-                Win_CommTimeouts.ReadTotalTimeoutConstant = millisec;
+                Win_CommTimeouts.ReadTotalTimeoutConstant = 100;
             }
             Win_CommTimeouts.ReadTotalTimeoutMultiplier = 0;
             Win_CommTimeouts.WriteTotalTimeoutMultiplier = millisec;

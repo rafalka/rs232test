@@ -439,7 +439,7 @@ void MainWindow::createDisplayModeMenu()
     act = displayModeMenu.addAction("C-like string", this, SLOT(displayModeTriggered()));
     act->setCheckable(true);
     act->setData(OUTMODE_CSTR);
-    if(current_output_mode_idx==OUTMODE_ASCII) act->setChecked(true);
+    if(current_output_mode_idx==OUTMODE_CSTR) act->setChecked(true);
     menuGroup->addAction(act);
 
 #if 0
@@ -677,8 +677,18 @@ void MainWindow::updateInputModeMacrosMenu()
 
 void MainWindow::onReadyRead()
 {
-    QByteArray buf = port->readAll();
-    logOpBlue(QString("Read %1 bytes").arg(buf.size()));
+    //logOpBlue("Read Event...");
+    QByteArray buf;// = port->readAll();
+
+    int maxlen = port->bytesAvailable();
+    if (maxlen<=0) return;
+
+    if (maxlen<8192) maxlen = 8192; // If we want to use timeouts, we must try read more than is in buffer.
+    buf.resize(maxlen);
+
+    maxlen = port->read(buf.data(), maxlen );
+    buf.resize(maxlen);
+    logOpBlue(QString("Read %1 bytes").arg( maxlen ));
     QBinStrConv* displayConv = currentDisplayConv();
     if (displayConv)
     {

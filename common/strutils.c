@@ -395,7 +395,7 @@ size_t CStrToStr(const char* str, size_t strsize, char* outstr, size_t outstrsiz
   if (!str || !strsize || !outstr || !outstrsize) return 0;
 
   strend=str+strsize;
-  outend=outstr+outstrsize-1/*space for null char*/;
+  outend=outstr+outstrsize;
   bufpos=outstr;
   while (str<strend && bufpos<outend && *str)
   {
@@ -478,7 +478,8 @@ size_t CStrToStr(const char* str, size_t strsize, char* outstr, size_t outstrsiz
   }
 
   // We reserved space for null char
-  *bufpos=0;
+  if (bufpos<outend)
+    *bufpos=0;
 
   return (size_t) (bufpos-outstr);
 }

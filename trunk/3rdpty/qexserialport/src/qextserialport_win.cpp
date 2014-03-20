@@ -416,7 +416,7 @@ void QextSerialPortPrivate::updatePortSettings()
                 Win_CommTimeouts.ReadTotalTimeoutConstant = 0;
             } else {
                 Win_CommTimeouts.ReadIntervalTimeout = millisec;
-                Win_CommTimeouts.ReadTotalTimeoutConstant = 100;
+                Win_CommTimeouts.ReadTotalTimeoutConstant = 250;
             }
             Win_CommTimeouts.ReadTotalTimeoutMultiplier = 0;
             Win_CommTimeouts.WriteTotalTimeoutMultiplier = millisec;

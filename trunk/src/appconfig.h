@@ -86,12 +86,22 @@ public:
 };
 
 
+template <typename T> class convVarAsIntTo
+{
+public:
+    static void fromVar(QVariant& var, T* val) { *val = static_cast<T>(var.toInt()); }
+    static void toVar(T* val, QVariant& var )  {  var = static_cast<int>(*val); }
+};
+
+/*
 class convVarTo_int
 {
 public:
     static void fromVar(QVariant& var, int* val) { *val =  var.toInt(); }
     static void toVar(int* val, QVariant& var )  {  var = *val; }
 };
+*/
+typedef convVarAsIntTo<int> convVarTo_int;
 
 class convVarTo_QString
 {

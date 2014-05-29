@@ -16,27 +16,29 @@
 
 #include <QAction>
 #include <QInputDialog>
+#include <QtSerialPort/QSerialPortInfo>
 
-#include "serialsetupdialog.h"
 #include "MacrosEditDialog.h"
 
-#include "qextserialenumerator.h"
-#include "qextserialport.h"
+//#include "qextserialenumerator.h"
+//#include "qextserialport.h"
 #include "qhexedit.h"
 
 #include "debug.h"
 
 //static const char*
 
-
+static const SerialSetupDialog::PortSettings defaultPortSettings = {115200,QSerialPort::Data8, QSerialPort::NoParity, QSerialPort::OneStop,QSerialPort::NoFlowControl, 250};
 // ******************************************************************************** C L A S S: MainWindow
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , logFile(0)
+    , portSettings(defaultPortSettings)
     , current_intput_mode_idx(-1)
     , current_output_mode_idx(-1)
+    , outopt(OUTOPT_SHOW_INPUT | OUTOPT_SHOW_OUT_INFO)
 {
     setupUi();
 
@@ -56,6 +58,7 @@ MainWindow::MainWindow(QWidget *parent)
     if (current_output_mode_idx<0||current_output_mode_idx>=__OUTMODES_CNT) current_output_mode_idx = 0;
 
     createDisplayModeMenu();
+    createDisplayOptionsMenu();
 
     createDevicesList();
 
@@ -66,12 +69,19 @@ MainWindow::MainWindow(QWidget *parent)
 
     createInputModeMenu();
 
-    port = new QextSerialPort(QextSerialPort::EventDriven,this);
+    _port = new QSerialPort(this);
 
-    ASSERT_ALWAYS( connect(port, SIGNAL(readyRead()),    SLOT(onReadyRead()) ) );
-    ASSERT_ALWAYS( connect(port, SIGNAL(bytesWritten(qint64)), SLOT(onBytesWritten(qint64)) ) );
+    ASSERT_ALWAYS( connect(_port, SIGNAL(error(QSerialPort::SerialPortError)),    SLOT(onSerialPortError(QSerialPort::SerialPortError)) ) );
+
+    ASSERT_ALWAYS( connect(_port, SIGNAL(readyRead()),    SLOT(onReadyRead()) ) );
+    ASSERT_ALWAYS( connect(_port, SIGNAL(bytesWritten(qint64)), SLOT(onBytesWritten(qint64)) ) );
+    //ASSERT_ALWAYS( connect(_port, SIGNAL(dataTerminalReadyChanged(bool)),    SLOT(onLineChanged(bool)) ) );
+    //ASSERT_ALWAYS( connect(_port, SIGNAL(requestToSendChanged(bool)),        SLOT(onLineChanged(bool)) ) );
+    ASSERT_ALWAYS( connect(_port, SIGNAL(pinoutSignalsChanged(QSerialPort::PinoutSignals)),        SLOT(onSerialLinesChanged(QSerialPort::PinoutSignals)) ) );
+
 
     updateUiAccordingToPortState(false,"NONE");
+    updateUiAccordingToPinoutSignals(0);
 
     ASSERT_ALWAYS( connect(ui->binaryEditor, SIGNAL(inputChanged()),               SLOT(onInputChanged() ) ) );
     ASSERT_ALWAYS( connect(ui->binaryEditor, SIGNAL(inputPosChanged(int)),         SLOT(onInputPosChanged(int) ) ) );
@@ -110,9 +120,9 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    if (port->isOpen() )
+    if (_port->isOpen() )
     {
-        port->close();
+        _port->close();
     }
 
     updateConfig(CONF_OP_WRITE);
@@ -120,8 +130,8 @@ MainWindow::~MainWindow()
     closeLogFile();
 
     delete ui;
-    delete port;
-    port = NULL;
+    delete _port;
+    _port = NULL;
 
 }
 
@@ -302,8 +312,24 @@ void MainWindow::updateUiAccordingToPortState(bool is_open, const QString& portN
     ui->connectBtn->setChecked(is_open);
     ui->devicesComboBox->setEnabled(! is_open );
     ui->sendBtn->setEnabled(is_open);
-    //ui->setupBtn->setEnabled(! is_open);
 
+    ui->dtrBtn->setEnabled( is_open );
+    ui->rtsBtn->setEnabled( is_open );
+
+    //ui->setupBtn->setEnabled( is_open);
+
+}
+
+void MainWindow::updateUiAccordingToPinoutSignals(QSerialPort::PinoutSignals pinoutSignals)
+{
+    ui->dtrBtn->setChecked( pinoutSignals & QSerialPort::DataTerminalReadySignal );
+    ui->rtsBtn->setChecked( pinoutSignals & QSerialPort::RequestToSendSignal );
+
+
+
+    ui->ctsLbl->setAutoFillBackground( pinoutSignals & QSerialPort::ClearToSendSignal );
+    ui->dsrLbl->setAutoFillBackground( pinoutSignals & QSerialPort::DataSetReadySignal );
+    ui->rngLbl->setAutoFillBackground( pinoutSignals & QSerialPort::RingIndicatorSignal );
 }
 
 void MainWindow::changeEvent(QEvent *e)
@@ -320,60 +346,56 @@ void MainWindow::changeEvent(QEvent *e)
 
 void MainWindow::createInputModeMenu()
 {
-    QAction*      act;
     int           cnt;
-    QActionGroup* menuGroup = new QActionGroup(this);
-#if 0
-    QStrBinConv*  conv;
 
-    for (cnt=0; cnt<QStrBinConvCollection::getCount(); cnt++)
-    {
-        conv = QStrBinConvCollection::getConv(cnt);
-        act = inputModeMenu.addAction(QString(conv->getName()),
-                                      this,
-                                      SLOT(inputModeTriggered()));
-        act->setCheckable(true);
-        act->setData(cnt);
-        menuGroup->addAction(act);
-        //TODO: Ugly: set default converted in menu creation routine :-(
-        if (!cnt)
-        {
-            act->setChecked(true);
-            setInputConv( conv );
-        }
-        else
-        {
-            QStrBinConvCollection::disposeConv(conv);
-        }
-    }
-#else
     for (cnt=0; cnt<static_cast<int>(__INMODES_CNT); cnt++)
     {
-        act = inputModeMenu.addAction(input_modes[cnt].name,
-                                      this,
-                                      SLOT(inputModeTriggered()));
-        act->setCheckable(true);
-        act->setData(cnt);
-        //TODO: Ugly: set default converted in menu creation routine :-(
-        if (cnt==current_intput_mode_idx)
-        {
-            act->setChecked(true);
-        }
-        menuGroup->addAction(act);
+        ui->InputModeCombo->addItem(input_modes[cnt].name,cnt);
     }
-#endif
-    ui->inputModeMenuBtn->setMenu(&inputModeMenu);
+    ui->InputModeCombo->setCurrentIndex(current_intput_mode_idx);
+}
+
+void MainWindow::createDisplayModeMenu()
+{
+    int           cnt;
+    for (cnt=0; cnt<static_cast<int>(__OUTMODES_CNT); cnt++)
+    {
+        ui->DisplayModeCombo->addItem(display_convs[cnt]->getName(),cnt);
+    }
+}
+
+void MainWindow::addDisplayOptToMenu(QMenu* menu, QString name, output_options_t opt)
+{
+    QAction*      act;
+    act = menu->addAction(name, this, SLOT(displayOptionsTriggered()) );
+    act->setData(opt);
+    act->setCheckable(true);
+    act->setChecked( outopt & opt );
+}
+
+void MainWindow::createDisplayOptionsMenu()
+{
+    QMenu* menu = new QMenu();
+    addDisplayOptToMenu(menu, tr("Display data sent do port"), OUTOPT_SHOW_INPUT);
+    addDisplayOptToMenu(menu, tr("Display received data info"), OUTOPT_SHOW_OUT_INFO);
+    ui->dsplOptionsMenuBtn->setMenu(menu);
 }
 
 void MainWindow::createDevicesList()
 {
-    QList<QextPortInfo> ports = QextSerialEnumerator::getPorts();
+    //QList<QextPortInfo> ports = QextSerialEnumerator::getPorts();
+    QList<QSerialPortInfo> ports = QSerialPortInfo::availablePorts();
+    QSerialPortInfo       info;
+    QString               portName;
+
     ui->devicesComboBox->clear();
     int selIndex = -1;
     for (int i = 0; i < ports.size(); i++) {
-        ui->devicesComboBox->addItem(QString("%1\t- %2").arg(ports.at(i).portName).arg(ports.at(i).friendName),ports.at(i).portName);
+        info     = ports.at(i);
+        portName = info.portName();
+        ui->devicesComboBox->addItem(QString("%1\t- %2").arg( portName ).arg(info.description()),portName);
 
-        if (selPortName==ports.at(i).portName)
+        if (selPortName==portName)
         {
             selIndex = i;
         }
@@ -384,12 +406,30 @@ void MainWindow::createDevicesList()
     }
 }
 
+void MainWindow::updatePortConfig(cfg_operations_t operation)
+{
+#define RW_PORTSETTINGS_FIELD(_type_, _name_) AutoCfg<_type_,convVarAsIntTo<_type_> >::doCfg(operation, &portSettings._name_, #_name_)
+    RW_PORTSETTINGS_FIELD(qint32,                   BaudRate);
+    RW_PORTSETTINGS_FIELD(QSerialPort::DataBits,    DataBits);
+    RW_PORTSETTINGS_FIELD(QSerialPort::Parity,      Parity);
+    RW_PORTSETTINGS_FIELD(QSerialPort::StopBits,    StopBits);
+    RW_PORTSETTINGS_FIELD(QSerialPort::FlowControl, FlowControl);
+    RW_PORTSETTINGS_FIELD(long,                     Timeout_Millisec);
+    //AutoCfg<qint32,                convVarAsIntTo<qint32>                >::doCfg(operation, portSettings.BaudRate, "BaudRate");
+    //AutoCfg<QSerialPort::DataBits, convVarAsIntTo<QSerialPort::DataBits> >::doCfg(operation, portSettings.DataBits, "DataBits");
+ #undef RW_PORTSETTINGS_FIELD
+}
+
 void MainWindow::updateConfig(cfg_operations_t operation)
 {
     AutoCfg_QString::doCfg(  operation, &selPortName,    "PortName");
-
+    appconfig->beginGroup("PortSettings");
+    updatePortConfig(operation);
+    appconfig->endGroup();
     // Input mode settings
     InputMode* inm;
+
+    AutoCfg_int::doCfg(operation, &outopt, "DisplayFlags" );
 
     appconfig->beginGroup("InputMode");
     AutoCfg_int::doCfg(operation, &current_intput_mode_idx, "SelInputMode" );
@@ -416,84 +456,22 @@ void MainWindow::displayErrMsg(const QString &msg)
      ui->outputTextEdit->appendPlainText(msg);
 }
 
-
-void MainWindow::createDisplayModeMenu()
+void MainWindow::displayOptionsTriggered()
 {
-    QAction*      act;
-    QActionGroup* menuGroup = new QActionGroup(this);
-
-    //Very ugly but quick - we creating menu "from hand"
-
-    act = displayModeMenu.addAction("HEX", this, SLOT(displayModeTriggered()));
-    act->setCheckable(true);
-    act->setData(OUTMODE_HEX);
-    if(current_output_mode_idx==OUTMODE_HEX) act->setChecked(true);
-    menuGroup->addAction(act);
-
-    act = displayModeMenu.addAction("ASCII", this, SLOT(displayModeTriggered()));
-    act->setCheckable(true);
-    act->setData(OUTMODE_ASCII);
-    if(current_output_mode_idx==OUTMODE_ASCII) act->setChecked(true);
-    menuGroup->addAction(act);
-
-    act = displayModeMenu.addAction("C-like string", this, SLOT(displayModeTriggered()));
-    act->setCheckable(true);
-    act->setData(OUTMODE_CSTR);
-    if(current_output_mode_idx==OUTMODE_CSTR) act->setChecked(true);
-    menuGroup->addAction(act);
-
-#if 0
-    int           cnt;
-    QBinStrConv*  conv;
-    for (cnt=0; cnt<QBinStrConvCollection::getCount(); cnt++)
+    QAction* who = static_cast<QAction*>( QObject::sender () );
+    if (who)
     {
-        conv = QBinStrConvCollection::getConv(cnt);
-        act = displayModeMenu.addAction(QString(conv->getName()),
-                                      this,
-                                      SLOT(displayModeTriggered()));
-        act->setCheckable(true);
-        act->setData(cnt);
-        menuGroup->addAction(act);
-        //TODO: Ugly: set default converted in menu creation routine :-(
-        if (!cnt)
-        {
-            act->setChecked(true);
-            displayConv = conv;
+        int opt = who->data().toInt();
+        if (who->isChecked() ) {
+            outopt |= opt;
         }
         else
         {
-            QBinStrConvCollection::disposeConv(conv);
+            outopt &= ~opt;
         }
     }
-#endif
-    ui->displayModeMenuBtn->setMenu(&displayModeMenu);
 }
 
-void MainWindow::inputModeTriggered()
-{
-    QAction* who = static_cast<QAction*>( QObject::sender () );
-    if (who)
-    {
-        ui->statusBar->showMessage(QString("Input mode set to: %1").arg(who->text()),2000);
-#if 0
-        setInputConv( QStrBinConvCollection::getConv(who->data().toInt()) );
-#else
-        selectInputMode(static_cast<input_modes_t>(who->data().toInt()) );
-#endif
-    }
-}
-
-void MainWindow::displayModeTriggered()
-{
-    QAction* who = static_cast<QAction*>( QObject::sender () );
-    if (who)
-    {
-        ui->statusBar->showMessage(QString("Display mode set to: %1").arg(who->text()),2000);
-
-        current_output_mode_idx = who->data().toInt();
-    }
-
-}
 
 void MainWindow::inputHistoryTriggered()
 {
@@ -680,15 +658,18 @@ void MainWindow::onReadyRead()
     //logOpBlue("Read Event...");
     QByteArray buf;// = port->readAll();
 
-    int maxlen = port->bytesAvailable();
+    int maxlen = _port->bytesAvailable();
     if (maxlen<=0) return;
 
     if (maxlen<8192) maxlen = 8192; // If we want to use timeouts, we must try read more than is in buffer.
     buf.resize(maxlen);
 
-    maxlen = port->read(buf.data(), maxlen );
+    maxlen = _port->read(buf.data(), maxlen );
     buf.resize(maxlen);
-    logOpBlue(QString("Read %1 bytes").arg( maxlen ));
+    if (outopt & OUTOPT_SHOW_OUT_INFO)
+    {
+        logOpBlue(QString("Read %1 bytes").arg( maxlen ));
+    }
     QBinStrConv* displayConv = currentDisplayConv();
     if (displayConv)
     {
@@ -703,7 +684,10 @@ void MainWindow::onReadyRead()
 
 void MainWindow::onBytesWritten(qint64 bytes)
 {
-    logOpGray(QString("&lt;&lt;&lt; %1 bytes sent\n").arg(bytes));
+    if (outopt & OUTOPT_SHOW_INPUT)
+    {
+        logOpGray(QString("&lt;&lt;&lt; %1 bytes sent\n").arg(bytes));
+    }
     /*
     if (bytes>0)
     {
@@ -716,7 +700,7 @@ void MainWindow::onBytesWritten(qint64 bytes)
 
 qint64 MainWindow::sendData(const QByteArray &data )
 {
-    if (! port->isOpen() ) return 0;
+    if (! _port->isOpen() ) return 0;
 
     qint64      size = data.size();
     qint64      sent;
@@ -724,7 +708,7 @@ qint64 MainWindow::sendData(const QByteArray &data )
 
     while(size>0)
     {
-        sent = port->write(ptr,size);
+        sent = _port->write(ptr,size);
         if (!sent) break;
         ptr  += sent;
         size -= sent;
@@ -775,9 +759,12 @@ void MainWindow::on_sendBtn_clicked()
         QByteArray buf = inm->getEditorData();
         if ( buf.size() )
         {
-            logOpGray(QString("&gt;&gt;&gt; Sending %1 bytes...").arg(buf.size()));
-            if (currentDisplayConv() )
-            outHtml( currentDisplayConv()->convert(buf,QBinStrConv::HTML) );
+            if (outopt & OUTOPT_SHOW_INPUT)
+            {
+                logOpGray(QString("&gt;&gt;&gt; Sending %1 bytes...").arg(buf.size()));
+                if (currentDisplayConv() )
+                outHtml( currentDisplayConv()->convert(buf,QBinStrConv::HTML) );
+            }
 
             inm->addHistoryEntry(&buf);
 
@@ -792,24 +779,43 @@ void MainWindow::on_sendBtn_clicked()
 }
 
 
+
+
+void MainWindow::on_InputModeCombo_activated(int index)
+{
+    selectInputMode( static_cast<input_modes_t>(ui->InputModeCombo->itemData(index).toInt()) );
+}
+
+void MainWindow::on_DisplayModeCombo_activated(int index)
+{
+    //selectInputMode( static_cast<input_modes_t>(ui->InputModeCombo->itemData(index).toInt()) );
+     current_output_mode_idx = ui->DisplayModeCombo->itemData(index).toInt();
+}
+
+
 void MainWindow::on_connectBtn_clicked()
 {
-    if (port->isOpen() )
+    if (_port->isOpen() )
     {
-        port->close();
+        _port->close();
     }
     else if (ui->devicesComboBox->currentIndex()>=0)
     {
-        port->setPortName( ui->devicesComboBox->itemData(ui->devicesComboBox->currentIndex()).toString() );
-        if (! port->open(QIODevice::ReadWrite | QIODevice::Unbuffered) )
+        _port->setPortName( ui->devicesComboBox->itemData(ui->devicesComboBox->currentIndex()).toString() );
+        if (! _port->open(QIODevice::ReadWrite /*| QIODevice::Unbuffered*/) )
         {
             displayErrMsg(QString("Cannot open port: %1. Error: %2")
-                            .arg(port->portName())
-                            .arg(port->errorString()) );
+                            .arg(_port->portName())
+                            .arg(_port->errorString()) );
+        }
+        else
+        {
+            setPortSetting(_port, portSettings);
+            updateUiAccordingToPinoutSignals(_port->pinoutSignals());
         }
     }
 
-    updateUiAccordingToPortState(port->isOpen(),port->portName() );
+    updateUiAccordingToPortState(_port->isOpen(),_port->portName() );
 
 }
 
@@ -819,25 +825,181 @@ void MainWindow::on_devicesComboBox_onShowPopup()
 }
 
 
-
-
-
 void MainWindow::on_devicesComboBox_activated(int index)
 {
     selPortName = ui->devicesComboBox->itemData(index).toString();
-    if (! port->isOpen() && (index>=0) )
+    if (! _port->isOpen() && (index>=0) )
     {
-        port->setPortName( selPortName );
+        _port->setPortName( selPortName );
+    }
+}
+
+void MainWindow::getPortSetting(QSerialPort* port, SerialSetupDialog::PortSettings& settings)
+{
+    if (port)
+    {
+        settings.BaudRate  = (QSerialPort::BaudRate) port->baudRate();
+        settings.DataBits = port->dataBits();
+        settings.FlowControl = port->flowControl();
+        settings.Parity = port->parity();
+        settings.StopBits = port->stopBits();
+        settings.Timeout_Millisec = port->getTimeout();
+    }
+}
+
+void MainWindow::setPortSetting(QSerialPort* port, const SerialSetupDialog::PortSettings& settings)
+{
+    if (port)
+    {
+        port->setBaudRate(settings.BaudRate);
+        port->setDataBits(settings.DataBits);
+        port->setFlowControl(settings.FlowControl);
+        port->setParity(settings.Parity);
+        port->setStopBits(settings.StopBits);
+        port->setTimeout(settings.Timeout_Millisec);
     }
 }
 
 void MainWindow::on_setupBtn_clicked()
 {
-    PortSettings port_conf = port->getPortSetting();
+    if (_port->isOpen()) {
+        getPortSetting(_port,portSettings);
+    }
 
-    if ( SerialSetupDialog::Excecute(port_conf,port->portName(),this) )
+    if ( SerialSetupDialog::Excecute(portSettings,_port->portName(),this) )
     {
-        port->setPortSettings(port_conf);
+        if (_port->isOpen()) {
+            setPortSetting(_port, portSettings);
+        }
+    }
+}
+
+void MainWindow::on_dtrBtn_clicked(bool checked)
+{
+    if (_port->isOpen())
+        _port->setDataTerminalReady(checked);
+}
+
+void MainWindow::on_rtsBtn_clicked(bool checked)
+{
+    if (_port->isOpen())
+        _port->setRequestToSend(checked);
+
+}
+
+
+void MainWindow::on_dsplClearBtn_clicked()
+{
+    if ( ui->outputTextEdit->document()->isEmpty() ) return;
+
+
+    if ( QMessageBox::question(
+                this,
+                tr("Clear output area"),
+                tr("Output area is not empty\nDo you want to clear entire conent?"),
+                QMessageBox::Yes | QMessageBox::Cancel,
+                QMessageBox::Cancel
+            ) == QMessageBox::Yes )
+    {
+        ui->outputTextEdit->clear();
+    }
+}
+
+
+void MainWindow::on_dsplSaveBtn_clicked()
+{
+    if ( ui->outputTextEdit->document()->isEmpty() ) return;
+
+    QFileDialog dialog(this);
+    QStringList filters;
+
+    /*filters << "Text files (*.txt)"
+            << "HTML files (*.htm *.html)"
+            << "Any files (*)";
+
+    filters << "text/plain"
+            << "text/html"
+            << "application/octet-stream";
+    dialog.setMimeTypeFilters(filters);
+
+    //if (dialog.exec()) return;
+    */
+
+    QString sel_filters;
+    QString file_name = QFileDialog::getSaveFileName(this,
+                             tr("Save output area"),
+                             QString(),
+                             tr("Text Files (*.txt);;HTML files (*.html *.htm);;All files (*.*)"),
+                             &sel_filters
+                          );
+    if ( file_name.isEmpty() ) return;
+
+    QFile  file(file_name);
+    if (! file.open(QIODevice::WriteOnly) )
+    {
+        displayErrorMessage(QString("Cannot open for writing file: %1").arg(file_name) );
+        return;
+    }
+    logOpGreen(file_name);
+    logOpGreen(sel_filters);
+
+    QByteArray content = (sel_filters.startsWith("HTML"))
+            ? ui->outputTextEdit->document()->toHtml().toUtf8()
+            : ui->outputTextEdit->document()->toPlainText().toLocal8Bit() ;
+
+    file.write(content);
+
+}
+
+
+const char* MainWindow::getSerialPortErrorString(QSerialPort::SerialPortError error)
+{
+    const char* str;
+
+    switch (error) {
+    case QSerialPort::NoError:                   str = "No Error"; break;
+    case QSerialPort::DeviceNotFoundError:       str = "Device Not Found"; break;
+    case QSerialPort::PermissionError:           str = "Permission Error"; break;
+    case QSerialPort::OpenError:                 str = "Open Error"; break;
+    case QSerialPort::ParityError:               str = "Parity Error"; break;
+    case QSerialPort::FramingError:              str = "Framing Error"; break;
+    case QSerialPort::BreakConditionError:       str = "Break Condition Error"; break;
+    case QSerialPort::WriteError:                str = "Write Error"; break;
+    case QSerialPort::ReadError:                 str = "Read Error"; break;
+    case QSerialPort::ResourceError:             str = "Resource Error"; break;
+    case QSerialPort::UnsupportedOperationError: str = "Unsupported Operation"; break;
+    case QSerialPort::TimeoutError:              str = "Timeout Error"; break;
+    case QSerialPort::NotOpenError:              str = "Not Open Error"; break;
+    case QSerialPort::UnknownError:
+    default: str = "Unknown Error"; break;
+    }
+
+    return str;
+}
+
+void MainWindow::onSerialPortError(QSerialPort::SerialPortError error)
+{
+    if (error != QSerialPort::NoError)
+    {
+        logError(QString("Serial Port Error: ").append(getSerialPortErrorString(error)) );
+    }
+}
+
+void MainWindow::onLineChanged(bool set)
+{
+    (void) set;
+    if (_port->isOpen())
+    {
+        updateUiAccordingToPinoutSignals(_port->pinoutSignals());
+    }
+}
+
+void MainWindow::onSerialLinesChanged(QSerialPort::PinoutSignals signals_mask)
+{
+    (void) signals_mask;
+    if (_port->isOpen())
+    {
+        updateUiAccordingToPinoutSignals(_port->pinoutSignals());
     }
 
 }

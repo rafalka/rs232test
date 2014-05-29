@@ -7,6 +7,10 @@
         <file>16/misc.png</file>
         <file>16/bookmarks.png</file>
         <file>16/view-history.png</file>
+        <file>16/document-new.png</file>
+        <file>16/document-open.png</file>
+        <file>16/document-save.png</file>
+        <file>16/edit-delete.png</file>
     </qresource>
     <qresource prefix="/btn/22">
         <file>22/configure.png</file>
@@ -15,5 +19,9 @@
         <file>22/go-jump-locationbar.png</file>
         <file>22/bookmarks.png</file>
         <file>22/view-history.png</file>
+        <file>22/document-new.png</file>
+        <file>22/document-open.png</file>
+        <file>22/document-save.png</file>
+        <file>22/edit-delete.png</file>
     </qresource>
 </RCC>

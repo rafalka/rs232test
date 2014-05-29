@@ -16,7 +16,9 @@
 #define SERIALSETUPDIALOG_H
 
 #include <QDialog>
-#include <qextserialport.h>
+#include <QSerialPort>
+
+//#include <qextserialport.h>
 
 namespace Ui {
 class SerialSetupDialog;
@@ -25,7 +27,17 @@ class SerialSetupDialog;
 class SerialSetupDialog : public QDialog
 {
     Q_OBJECT
-    
+public:
+    struct PortSettings
+    {
+        /*QSerialPort::BaudRate*/qint32  BaudRate;
+        QSerialPort::DataBits    DataBits;
+        QSerialPort::Parity      Parity;
+        QSerialPort::StopBits    StopBits;
+        QSerialPort::FlowControl FlowControl;
+        long Timeout_Millisec;
+    };
+
 protected:
     void setupUI();
     void updateGuiToConfig(PortSettings& port_conf);

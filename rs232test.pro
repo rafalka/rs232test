@@ -1,4 +1,4 @@
-#-------------------------------------------------
+p#-------------------------------------------------
 #
 # Project created by QtCreator 2012-04-25T21:35:47
 #
@@ -57,13 +57,16 @@ RESOURCES += \
     res/icons_16.qrc \
     res/buttons.qrc
 
-INCLUDEPATH += src common 3rdpty/qhexedit2/src
+INCLUDEPATH += src common 3rdpty/qhexedit2/src 3rdpty/qtserialport/include/QtSerialPort 3rdpty/qtserialport/src/serialport 3rdpty/qtserialport/src/serialport/qt4support/include
 
 #INCLUDEPATH += ../../3rdpty/boost/include
+
 #LIBS        += -L../../3rdpty/boost/lib
 #-lwsock32
 
-include(3rdpty/qexserialport/src/qextserialport.pri)
+#include(3rdpty/qexserialport/src/qextserialport.pri)
+include(3rdpty/qtserialport/include/QtSerialPort/headers.pri)
+include(3rdpty/qtserialport/src/serialport/serialport-lib.pri)
 win32 {
   DEFINES += _WIN32_WINNT=0x0501
   RC_FILE = myapp.rc

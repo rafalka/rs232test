@@ -270,7 +270,7 @@ uint8_t calcFCS(const QByteArray& buf)
 }
 
 //======================================================= QAsciiBin2StrConv
-const char* QAsciiBin2StrConv::name = "Ascii";
+const char* QAsciiBin2StrConv::name = "ASCII";
 
 QString QAsciiBin2StrConv::convert(QByteArray &buf, QBinStrConv::STR_FORMAT format,uint32_t)
 {
@@ -281,7 +281,7 @@ QString QAsciiBin2StrConv::convert(QByteArray &buf, QBinStrConv::STR_FORMAT form
 
 
 //======================================================= QStr2AsciiBinConv
-const char* QStr2AsciiBinConv::name = "Ascii";
+const char* QStr2AsciiBinConv::name = "ASCII";
 
 QStrBinConv::VALIDITY QStr2AsciiBinConv::convert(QString &str, QByteArray* pOutBuf, int*)
 {
@@ -294,7 +294,7 @@ QStrBinConv::VALIDITY QStr2AsciiBinConv::convert(QString &str, QByteArray* pOutB
 
 
 //======================================================= QCStr2BinConv
-const char* QCStr2BinConv::name = "C-like formatted string";
+const char* QCStr2BinConv::name = "C-like string";
 QStrBinConv::VALIDITY QCStr2BinConv::convert(QString &str, QByteArray *pOutBuf, int *)
 {
     if ( pOutBuf)
@@ -313,7 +313,7 @@ QStrBinConv::VALIDITY QCStr2BinConv::convert(QString &str, QByteArray *pOutBuf, 
 
 
 //======================================================= QBin2CStrConv
-const char* QBin2CStrConv::name = "C-like formatted string";
+const char* QBin2CStrConv::name = "C-like string";
 QString QBin2CStrConv::convert(QByteArray &buf, QBinStrConv::STR_FORMAT format, uint32_t)
 {
     QString s = StrToCStrString( QString::fromLocal8Bit(buf) );

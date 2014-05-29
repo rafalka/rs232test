@@ -26,10 +26,13 @@
 #include <QFile>
 #include <QString>
 
+#include "QSerialPort"
+
 #include "appconfig.h"
+#include "serialsetupdialog.h"
 
 #include "strbinconv.h"
-#include "qextserialport.h"
+//#include "qextserialport.h"
 #include "InputHistoryList.h"
 
 #include "BinaryEditor.h"
@@ -160,20 +163,29 @@ public:
         __OUTMODES_CNT
     } output_modes_t;
 
+    typedef enum {
+        OUTOPT_SHOW_INPUT    = 0x0001,
+        OUTOPT_SHOW_OUT_INFO = 0x0002,
+
+        __OUTOPT_CNT
+    } output_options_t;
 
 protected:
     QConvValidator inputValidator;
-    QextSerialPort* port;
+    QSerialPort*   _port;
 
     qint64 sendData(const QByteArray &data );
 
     void updateUiAccordingToPortState(bool is_open, const QString& portName);
+    void updateUiAccordingToPinoutSignals(QSerialPort::PinoutSignals pinoutSignals);
 
     void changeEvent(QEvent *e);
     void createInputModeMenu();
     void createDisplayModeMenu();
     void createDevicesList();
 
+    void addDisplayOptToMenu(QMenu *menu, QString name, output_options_t opt);
+    void createDisplayOptionsMenu();
 private:
     Ui::MainWindow *ui;
     void  setupUi();
@@ -195,6 +207,7 @@ private:
     QMenu input_mode_macros_menu;
 
     QString       selPortName;
+    SerialSetupDialog::PortSettings portSettings;
 
     void        connectInputEditor(InputEditorAbstract* editor);
     InputMode   input_modes[__INMODES_CNT];
@@ -208,10 +221,14 @@ private:
     QBinStrConv* display_convs[__OUTMODES_CNT];
     QBinStrConv* currentDisplayConv() { return display_convs[current_output_mode_idx]; }
     int         current_output_mode_idx;
+    int         outopt; // Set of flags from output_options_t
 
     InputEditorAbstract* editor;
 
     void          updateConfig(cfg_operations_t operation);
+    void getPortSetting(QSerialPort *port, SerialSetupDialog::PortSettings &settings);
+    void setPortSetting(QSerialPort *port, const SerialSetupDialog::PortSettings &settings);
+    void updatePortConfig(cfg_operations_t operation);
 public:
     void log(const QString& msg, const char* color = "black", const char* fmt="i")
     {
@@ -246,9 +263,9 @@ public:
         ui->outputTextEdit->appendHtml(msg);
     }
 
+    const char* getSerialPortErrorString(QSerialPort::SerialPortError error);
+
 public slots:
-    void inputModeTriggered();
-    void displayModeTriggered();
     void inputHistoryTriggered();
 
     void inputMacrosAddTriggered();
@@ -261,6 +278,7 @@ public slots:
     void   onInputPosChanged(int pos);
     void   onInputOverwriteModeChanged(bool is_ovr_mode);
 
+    void displayOptionsTriggered();
 private slots:
     void   updateInputModeHistoryMenu();
     void   updateInputModeMacrosMenu();
@@ -269,10 +287,22 @@ private slots:
     void on_sendBtn_clicked();
     void on_connectBtn_clicked();
     void on_devicesComboBox_onShowPopup();
+
     void onReadyRead();
     void onBytesWritten( qint64 bytes );
+    void onSerialPortError(QSerialPort::SerialPortError error);
+    void onLineChanged(bool set);
+    void onSerialLinesChanged(QSerialPort::PinoutSignals signals_mask);
+
     void on_devicesComboBox_activated(int index);
     void on_setupBtn_clicked();
+
+    void on_InputModeCombo_activated(int index);
+    void on_DisplayModeCombo_activated(int index);
+    void on_dtrBtn_clicked(bool checked);
+    void on_rtsBtn_clicked(bool checked);
+    void on_dsplClearBtn_clicked();
+    void on_dsplSaveBtn_clicked();
 };
 
 extern MainWindow w;

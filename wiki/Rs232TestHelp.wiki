@@ -1,4 +1,5 @@
 #summary RS232Test tool on-line help
+#sidebar TableOfContents
 
 = Introduction =
 RS232Test is simple serial terminal that allows entering and displaying received data either in text or binary (HEX) mode.

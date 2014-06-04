@@ -71,6 +71,22 @@ void BinaryEditor::connectInputEditor(InputEditorAbstract *editor)
     ASSERT_ALWAYS( connect(editor, SIGNAL( inputChanged() ),             SLOT( onEditorDataChanged() )              ) );
 }
 
+void BinaryEditor::clear()
+{
+    QByteArray empty;
+    setInputData(empty);
+}
+
+void BinaryEditor::undo()
+{
+    current_editor->undo();
+}
+
+void BinaryEditor::redo()
+{
+    current_editor->redo();
+}
+
 void BinaryEditor::setEditMode(BinaryEditor::input_modes_t mode, bool forceRefresh )
 {
     InputEditorAbstract* new_editor=NULL;

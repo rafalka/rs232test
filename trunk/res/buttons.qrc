@@ -11,6 +11,8 @@
         <file>16/document-open.png</file>
         <file>16/document-save.png</file>
         <file>16/edit-delete.png</file>
+        <file>16/edit-redo.png</file>
+        <file>16/edit-undo.png</file>
     </qresource>
     <qresource prefix="/btn/22">
         <file>22/configure.png</file>

@@ -32,7 +32,7 @@ void InputHistoryList::Add(QVariantList *storage, QByteArray *item)
 
         if (n.toByteArray() == *item) break;
     }
-    if ( i<storage->size() )
+    if ( i < storage->size() )
     {
         // Item already exists, just move it to front
         storage->move(i,0);

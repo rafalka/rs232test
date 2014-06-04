@@ -34,6 +34,8 @@ public:
     virtual int        getCurrentPos() = 0;
     virtual bool       getOverwriteMode() = 0;
     virtual QWidget*   getWidget() = 0;
+    virtual void       undo() = 0;
+    virtual void       redo() = 0;
 
 public Q_SLOTS:
     void   refreshInput() {
@@ -71,6 +73,8 @@ public:
     virtual int        getCurrentPos();
     virtual bool       getOverwriteMode();
     virtual QWidget*   getWidget()                     { return editor; }
+    virtual void       undo()                          { editor->undo(); }
+    virtual void       redo()                          { editor->redo(); }
 
 protected Q_SLOTS:
     void on_editor_cursorPositionChanged();
@@ -95,6 +99,8 @@ public:
     virtual int        getCurrentPos()                { return editor->cursorPosition(); }
     virtual bool       getOverwriteMode()             { return editor->overwriteMode(); }
     virtual QWidget*   getWidget()                    { return editor; }
+    virtual void       undo()                         { editor->undo(); }
+    virtual void       redo()                         { editor->redo(); }
 
 public Q_SLOTS:
     void on_editor_currentAddressChanged (int address);
@@ -172,7 +178,7 @@ private:
 
     void connectInputEditor(InputEditorAbstract *editor);
 
-public Q_SLOTS:
+public slots:
 
     void   refreshInput() {
         emit overwriteModeChanged( getOverwriteMode() );
@@ -180,6 +186,10 @@ public Q_SLOTS:
         emit inputPosChanged( getCurrentPos() );
         emit inputChanged();
     }
+    void clear();
+    void undo();
+    void redo();
+
 
 protected Q_SLOTS:
     void onEditorCurrentAddressChanged (int address);

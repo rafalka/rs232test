@@ -88,6 +88,9 @@ MainWindow::MainWindow(QWidget *parent)
     ASSERT_ALWAYS( connect(ui->binaryEditor, SIGNAL(inputSizeChanged(int)),        SLOT(onInputSizeChanged(int) ) ) );
     ASSERT_ALWAYS( connect(ui->binaryEditor, SIGNAL(overwriteModeChanged(bool)),   SLOT(onInputOverwriteModeChanged(bool) ) ) );
 
+    ASSERT_ALWAYS( connect(ui->actEditUndo, SIGNAL(triggered()), ui->binaryEditor, SLOT(undo() ) ) );
+    ASSERT_ALWAYS( connect(ui->actEditRedo, SIGNAL(triggered()), ui->binaryEditor, SLOT(redo() ) ) );
+
 
     if (appcmdline.logFileName)
     {
@@ -185,7 +188,8 @@ void  MainWindow::setupUi()
     inputStatus->addPermanentWidget(lbOverwriteMode);
 
 
-    ui->inputEditLayout->addWidget(inputStatus,ui->inputEditLayout->rowCount()+1,0,1,ui->inputEditLayout->columnCount()-1);
+    //ui->inputEditLayout->addWidget(inputStatus,ui->inputEditLayout->rowCount()+1,0,1,ui->inputEditLayout->columnCount()-1);
+    ui->InputBtnsHLayout->addWidget(inputStatus);
 
     ui->splitter->setStretchFactor ( 0, 10 ); // Edit Part
     ui->splitter->setStretchFactor ( 1, 80 ); // Display part
@@ -344,6 +348,18 @@ void MainWindow::changeEvent(QEvent *e)
     }
 }
 
+void MainWindow::createInputToolbar()
+{
+    ui->inToolBar->addAction(ui->actEditNew);
+    ui->inToolBar->addAction(ui->actEditOpen);
+    ui->inToolBar->addAction(ui->actEditSave);
+    ui->inToolBar->addSeparator();
+    ui->inToolBar->addAction(ui->actEditUndo);
+    ui->inToolBar->addAction(ui->actEditRedo);
+    ui->inToolBar->addSeparator();
+
+}
+
 void MainWindow::createInputModeMenu()
 {
     int           cnt;
@@ -376,7 +392,7 @@ void MainWindow::addDisplayOptToMenu(QMenu* menu, QString name, output_options_t
 void MainWindow::createDisplayOptionsMenu()
 {
     QMenu* menu = new QMenu();
-    addDisplayOptToMenu(menu, tr("Display data sent do port"), OUTOPT_SHOW_INPUT);
+    addDisplayOptToMenu(menu, tr("Display data sent to port"), OUTOPT_SHOW_INPUT);
     addDisplayOptToMenu(menu, tr("Display received data info"), OUTOPT_SHOW_OUT_INFO);
     ui->dsplOptionsMenuBtn->setMenu(menu);
 }
@@ -586,6 +602,7 @@ void MainWindow::updateInputModeHistoryMenu()
     QAction*      act;
     QVariantList *storage = &inm.history;
     QByteArray    arr;
+    QString       title;
 
     for (int cnt = 0; cnt < storage->size(); ++cnt)
     {
@@ -593,8 +610,20 @@ void MainWindow::updateInputModeHistoryMenu()
         if ( ! n.canConvert(QVariant::ByteArray) ) continue;
 
         arr = n.toByteArray();
+        title = inm.display_converter->convert( arr, QBinStrConv::PLAIN_TEXT, QBinStrConv::OUTB_SIMPLE );
+
+        #define MAX_TITLE_SIZE    40
+        #define SHORTCUT_AFTER    25
+        #define SHORTCUT_STR      " ... "
+        #define SHORTCUT_STR_SIZE (sizeof(SHORTCUT_STR)-1)
+        if (title.size()>MAX_TITLE_SIZE) {
+            int cnt = title.size()-MAX_TITLE_SIZE+SHORTCUT_STR_SIZE;
+            title.replace(SHORTCUT_AFTER,cnt,SHORTCUT_STR);
+        }
+        title.append(QString(" (%1 bytes)").arg(arr.size()));
+
         act = input_mode_history_menu.addAction(
-                    inm.display_converter->convert( arr, QBinStrConv::PLAIN_TEXT, QBinStrConv::OUTB_SIMPLE ),
+                    title,
                     this,
                     SLOT(inputHistoryTriggered())
               );
@@ -827,11 +856,15 @@ void MainWindow::on_devicesComboBox_onShowPopup()
 
 void MainWindow::on_devicesComboBox_activated(int index)
 {
+    if (index<0) return;
+
     selPortName = ui->devicesComboBox->itemData(index).toString();
-    if (! _port->isOpen() && (index>=0) )
+    if (! _port->isOpen() )
     {
         _port->setPortName( selPortName );
+
     }
+    updateUiAccordingToPortState( _port->isOpen(), selPortName );
 }
 
 void MainWindow::getPortSetting(QSerialPort* port, SerialSetupDialog::PortSettings& settings)
@@ -888,7 +921,82 @@ void MainWindow::on_rtsBtn_clicked(bool checked)
 }
 
 
-void MainWindow::on_dsplClearBtn_clicked()
+
+void MainWindow::on_actEditNew_triggered()
+{
+    if (! ui->binaryEditor->getInputSize() ) return;
+
+    if ( QMessageBox::question(
+                this,
+                tr("Clear editor content"),
+                tr("Editor is not empty\nDo you want to clear entire conent?"),
+                QMessageBox::Yes | QMessageBox::Cancel,
+                QMessageBox::Cancel
+            ) == QMessageBox::Yes )
+    {
+        ui->binaryEditor->clear();
+    }
+
+}
+
+void MainWindow::on_actEditSave_triggered()
+{
+    if (! ui->binaryEditor->getInputSize() ) return;
+
+    QString file_name = QFileDialog::getSaveFileName(this,
+                             tr("Save editor content"),
+                             QString(),
+                             tr("All files (*.*)")
+                          );
+    if ( file_name.isEmpty() ) return;
+
+    QFile  file(file_name);
+    if (! file.open(QIODevice::WriteOnly) )
+    {
+        displayErrorMessage(QString("Cannot open for writing file: %1").arg(file_name) );
+        return;
+    }
+
+    file.write(ui->binaryEditor->getInputConstData());
+}
+
+void MainWindow::on_actEditOpen_triggered()
+{
+    if ( ui->binaryEditor->getInputSize() )
+    {
+        if ( QMessageBox::question(
+                    this,
+                    tr("Load editor content"),
+                    tr("Editor is not empty\nDo you want to load file and overwrite entire conent?"),
+                    QMessageBox::Yes | QMessageBox::Cancel,
+                    QMessageBox::Cancel
+                ) == QMessageBox::Cancel )
+        {
+            return;
+        }
+    }
+
+    QString file_name = QFileDialog::getOpenFileName(this,
+                             tr("Load editor content"),
+                             QString(),
+                             tr("All files (*.*)")
+                          );
+    if ( file_name.isEmpty() ) return;
+
+    QFile  file(file_name);
+    if (! file.open(QIODevice::ReadOnly) )
+    {
+        displayErrorMessage(QString("Cannot open for reading file: %1").arg(file_name) );
+        return;
+    }
+
+
+    QByteArray data = file.readAll();
+    ui->binaryEditor->setInputData( data );
+}
+
+
+void MainWindow::on_actOutNew_triggered()
 {
     if ( ui->outputTextEdit->document()->isEmpty() ) return;
 
@@ -905,25 +1013,9 @@ void MainWindow::on_dsplClearBtn_clicked()
     }
 }
 
-
-void MainWindow::on_dsplSaveBtn_clicked()
+void MainWindow::on_actOutSave_triggered()
 {
     if ( ui->outputTextEdit->document()->isEmpty() ) return;
-
-    QFileDialog dialog(this);
-    QStringList filters;
-
-    /*filters << "Text files (*.txt)"
-            << "HTML files (*.htm *.html)"
-            << "Any files (*)";
-
-    filters << "text/plain"
-            << "text/html"
-            << "application/octet-stream";
-    dialog.setMimeTypeFilters(filters);
-
-    //if (dialog.exec()) return;
-    */
 
     QString sel_filters;
     QString file_name = QFileDialog::getSaveFileName(this,
@@ -940,8 +1032,6 @@ void MainWindow::on_dsplSaveBtn_clicked()
         displayErrorMessage(QString("Cannot open for writing file: %1").arg(file_name) );
         return;
     }
-    logOpGreen(file_name);
-    logOpGreen(sel_filters);
 
     QByteArray content = (sel_filters.startsWith("HTML"))
             ? ui->outputTextEdit->document()->toHtml().toUtf8()
@@ -1028,4 +1118,3 @@ QValidator::State QConvValidator::validate( QString & input, int & pos ) const
     return QValidator::Acceptable;
 
 }
-

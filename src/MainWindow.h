@@ -186,6 +186,7 @@ protected:
 
     void addDisplayOptToMenu(QMenu *menu, QString name, output_options_t opt);
     void createDisplayOptionsMenu();
+    void createInputToolbar();
 private:
     Ui::MainWindow *ui;
     void  setupUi();
@@ -209,7 +210,6 @@ private:
     QString       selPortName;
     SerialSetupDialog::PortSettings portSettings;
 
-    void        connectInputEditor(InputEditorAbstract* editor);
     InputMode   input_modes[__INMODES_CNT];
     void        prepareInputModes();
     void        selectInputMode(input_modes_t mode);
@@ -223,7 +223,6 @@ private:
     int         current_output_mode_idx;
     int         outopt; // Set of flags from output_options_t
 
-    InputEditorAbstract* editor;
 
     void          updateConfig(cfg_operations_t operation);
     void getPortSetting(QSerialPort *port, SerialSetupDialog::PortSettings &settings);
@@ -301,8 +300,11 @@ private slots:
     void on_DisplayModeCombo_activated(int index);
     void on_dtrBtn_clicked(bool checked);
     void on_rtsBtn_clicked(bool checked);
-    void on_dsplClearBtn_clicked();
-    void on_dsplSaveBtn_clicked();
+    void on_actOutNew_triggered();
+    void on_actOutSave_triggered();
+    void on_actEditNew_triggered();
+    void on_actEditSave_triggered();
+    void on_actEditOpen_triggered();
 };
 
 extern MainWindow w;

@@ -1,0 +1,1 @@
+Simple, multi-platform GUI serial terminal written in QT5/C++
